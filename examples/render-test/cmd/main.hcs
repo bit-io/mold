@@ -1,0 +1,75 @@
+get <bit:mold>
+
+fun check(name: Str, ok: Bool) [
+    if ok [
+        log("ok   ", name)
+    ] else [
+        log("FAIL ", name)
+        exit(1)
+    ]
+]
+
+fun main() [
+    let rs = layout_vertical([constraint_length(3), constraint_fill(1), constraint_max(5), constraint_percentage(20)], rect_new(0, 0, 40, 30))
+    check("layout length", rs[0].height == 3)
+    check("layout fill", rs[1].height == 16)
+    check("layout max", rs[2].height == 5)
+    check("layout percentage", rs[3].height == 6)
+    check("layout suma", rs[3].y + rs[3].height == 30)
+
+    check("uni_width cjk", uni_width("ab漢字ż") == 7)
+    let wr = uni_wrap("ala ma kota a kot ma ale", 10, true)
+    check("wrap", wr.len() == 3 and wr[0] == "ala ma")
+
+    let buf = buffer_new(rect_new(0, 0, 10, 3))
+    let blk = block_bordered()
+    block_set_title(blk, "T")
+    render_block(buf, blk, rect_new(0, 0, 10, 3))
+    check("block top-left", buffer_symbol(buf, 0, 0) == "┌")
+    check("block title", buffer_symbol(buf, 1, 0) == "T")
+    check("block bottom-right", buffer_symbol(buf, 9, 2) == "┘")
+    let inner = block_inner(blk, rect_new(0, 0, 10, 3))
+    check("block inner", inner.x == 1 and inner.width == 8 and inner.height == 1)
+
+    check("rgb sgr", sgr_sequence(color_rgb(1, 2, 3), 0, 0) == "\e[0;38;2;1;2;3m")
+    check("mods", mods_has(mods_add(0, MOD_BOLD), MOD_BOLD) and not mods_has(0, MOD_BOLD))
+
+    check("uni flag cluster", uni_graphemes("🇵🇱🇩🇪").len() == 2 and uni_width("🇵🇱🇩🇪") == 4)
+    check("uni zwj family", uni_width("👨‍👩‍👧") == 2)
+    check("uni vs16", uni_width("❤️") == 2)
+    check("uni hangul", uni_width("한글") == 4)
+    check("uni combining", uni_width("é") == 1)
+
+    let tb = buffer_new(rect_new(0, 0, 20, 6))
+    let t = table_new([row_from_strs(["a", "x\ny\nz"]), row_from_strs(["b", "w"])], [constraint_length(2), constraint_fill(1)])
+    let ts = table_state_new()
+    render_table(tb, t, rect_new(0, 0, 20, 6), ts)
+    check("table multiline", buffer_symbol(tb, 3, 2) == "z" and buffer_symbol(tb, 0, 3) == "b")
+    check("row height", row_height(row_from_strs(["a", "1\n2\n3"])) == 3)
+
+    check("weekday sat", weekday_of(2026, 10, 17) == 6)
+    check("leap", days_in_month(2024, 2) == 29 and days_in_month(2026, 2) == 28)
+    let cal = calendar_new(2026, 10)
+    let cb = buffer_new(rect_new(0, 0, 20, 8))
+    render_calendar(cb, cal, rect_new(0, 0, 20, 8))
+    check("calendar day 1 under Cz", buffer_symbol(cb, 10, 2) == "1")
+    check("calendar height", calendar_height(cal) == 7)
+
+    let cv = canvas_new(4, 2, MARKER_BRAILLE, 0.0, 1.0, 0.0, 1.0)
+    canvas_point(cv, 0.0, 1.0, COLOR_RED)
+    let cvb = buffer_new(rect_new(0, 0, 4, 2))
+    render_canvas(cvb, cv, rect_new(0, 0, 4, 2))
+    check("canvas braille dot", buffer_symbol(cvb, 0, 0) == uni_braille(1))
+    check("braille mapping", uni_braille(0) == "⠀" and uni_braille(255) == "⣿")
+
+    let xa = axis_new(0.0, 10.0)
+    axis_auto_labels(xa, 3, 0)
+    check("axis labels", xa.labels.len() == 3 and xa.labels[1] == "5")
+    check("fmt_num", fmt_num(2.50, 2) == "2.5" and fmt_num(3.0, 2) == "3")
+
+    let bb = block_with_border_type(block_with_title(block_bordered(), "T"), BORDER_ROUNDED)
+    let bbuf = buffer_new(rect_new(0, 0, 6, 3))
+    render_block(bbuf, bb, rect_new(0, 0, 6, 3))
+    check("builders chain", buffer_symbol(bbuf, 0, 0) == "╭" and buffer_symbol(bbuf, 1, 0) == "T")
+    log("wszystko OK")
+]
