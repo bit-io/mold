@@ -1,0 +1,145 @@
+include <style>
+include <geometry>
+include <backend>
+include <buffer>
+
+struct Terminal [
+    buffer: Buffer,
+    prev: Buffer,
+    width: Int,
+    height: Int,
+    cursor_x: Int,
+    cursor_y: Int,
+    cursor_visible: Bool,
+    mouse: Bool,
+    full_redraw: Bool
+]
+
+!!! Wchodzi w tryb TUI: raw mode, ekran alternatywny, ukryty kursor.
+!!! Zawsze zakoncz `terminal_restore(term)` (takze przy bledach).
+fun terminal_init() -> Terminal [
+    backend_raw_enable()
+    backend_write("\e[?1049h\e[?25l\e[2J\e[H")
+    let sz = backend_size()
+    let area = rect_new(0, 0, sz.width, sz.height)
+    end Terminal(buffer_new(area), buffer_new(area), sz.width, sz.height, 0, 0, false, false, true)
+]
+
+!!! Jak `terminal_init`, z raportowaniem myszy (klik, przeciaganie, kolko).
+fun terminal_init_mouse() -> Terminal [
+    let t = terminal_init()
+    backend_write("\e[?1000h\e[?1002h\e[?1006h")
+    t.mouse = true
+    end t
+]
+
+!!! Przywraca terminal (ekran glowny, kursor, tryb kanoniczny).
+fun terminal_restore(t: Terminal) [
+    backend_write("\e[0m\e[?1006l\e[?1002l\e[?1000l\e[?25h\e[?1049l")
+    backend_raw_disable()
+    end
+]
+
+!!! Obszar calego terminala.
+fun terminal_area(t: Terminal) -> Rect [
+    end rect_new(0, 0, t.width, t.height)
+]
+
+!!! Zaczyna klatke: dopasowuje rozmiar (resize), czysci bufor i zwraca obszar.
+!!! Rysuj widgety do `term.buffer`, potem wywolaj `terminal_end(term)`.
+fun terminal_begin(t: Terminal) -> Rect [
+    let sz = backend_size()
+    if sz.width != t.width or sz.height != t.height [
+        let area = rect_new(0, 0, sz.width, sz.height)
+        t.buffer = buffer_new(area)
+        t.prev = buffer_new(area)
+        t.width = sz.width
+        t.height = sz.height
+        t.full_redraw = true
+    ]
+    buffer_reset(t.buffer)
+    t.cursor_visible = false
+    end rect_new(0, 0, t.width, t.height)
+]
+
+!!! Ustawia kursor tekstowy (widoczny po `terminal_end`), np. w polu edycji.
+fun terminal_set_cursor(t: Terminal, x: Int, y: Int) [
+    t.cursor_x = x
+    t.cursor_y = y
+    t.cursor_visible = true
+    end
+]
+
+fun terminal_cell_changed(a: Buffer, b: Buffer, i: Int) -> Bool [
+    end a.cells[i].fg != b.cells[i].fg or a.cells[i].bg != b.cells[i].bg or a.cells[i].mods != b.cells[i].mods or a.cells[i].symbol != b.cells[i].symbol
+]
+
+!!! Konczy klatke: wysyla do terminala tylko zmienione komorki (jedno `write`).
+fun terminal_end(t: Terminal) [
+    let out = ""
+    if t.full_redraw [
+        out = "\e[0m\e[2J"
+    ]
+    let w = t.width
+    let n = t.buffer.cells.len()
+    let cur_fg = -1
+    let cur_bg = -1
+    let cur_mods = -1
+    let at_x = -1
+    let at_y = -1
+    let i = 0
+    while i < n [
+        let sym = t.buffer.cells[i].symbol.clone()
+        let changed = t.full_redraw or terminal_cell_changed(t.buffer, t.prev, i)
+        if changed and sym != "" [
+            let x = i % w
+            let y = i / w
+            if x != at_x or y != at_y [
+                out = out + "\e[" + ((y + 1) as Str) + ";" + ((x + 1) as Str) + "H"
+            ]
+            let fg = t.buffer.cells[i].fg
+            let bg = t.buffer.cells[i].bg
+            let md = t.buffer.cells[i].mods
+            if fg != cur_fg or bg != cur_bg or md != cur_mods [
+                out = out + sgr_sequence(fg, bg, md)
+                cur_fg = fg
+                cur_bg = bg
+                cur_mods = md
+            ]
+            out = out + sym
+            at_x = x + uni_width(sym)
+            at_y = y
+        ]
+        i = i + 1
+    ]
+    if t.cursor_visible [
+        out = out + "\e[0m\e[" + ((t.cursor_y + 1) as Str) + ";" + ((t.cursor_x + 1) as Str) + "H\e[?25h"
+    ] else [
+        out = out + "\e[?25l"
+    ]
+    backend_write(out)
+    t.prev = t.buffer.clone()
+    t.full_redraw = false
+    end
+]
+
+!! -- zdarzenia --------------------------------------------------------------
+
+!!! Czeka na zdarzenie do `timeout_ms` ms (alias `backend_poll`).
+fun event_poll(timeout_ms: Int) -> Event [
+    end backend_poll(timeout_ms)
+]
+
+!!! Czy to klawisz `code` bez Ctrl/Alt (np. "q", "Enter", "Up").
+fun event_is_key(e: Event, code: Str) -> Bool [
+    end e.kind == "key" and e.code == code and not mods_has(e.mods, 2) and not mods_has(e.mods, 4)
+]
+
+!!! Czy to Ctrl+`code` (np. event_is_ctrl(e, "c")).
+fun event_is_ctrl(e: Event, code: Str) -> Bool [
+    end e.kind == "key" and e.code == code and mods_has(e.mods, 2)
+]
+
+fun event_is_mouse(e: Event) -> Bool [
+    end e.kind == "mouse_down" or e.kind == "mouse_up" or e.kind == "mouse_drag" or e.kind == "mouse_move" or e.kind == "mouse_scroll"
+]
