@@ -1,1 +1,508 @@
+include <style>
+include <geometry>
+include <backend>
+include <text>
+include <buffer>
+include <widget_block>
 
+const MARKER_BRAILLE: Int = 0
+const MARKER_DOT: Int = 1
+const MARKER_BLOCK: Int = 2
+const MARKER_HALF: Int = 3
+
+fun float_floor(v: Float) -> Int [
+    let i = v as Int
+    if (i as Float) > v [
+        i = i - 1
+    ]
+    end i
+]
+
+fun float_round(v: Float) -> Int [
+    end float_floor(v + 0.5)
+]
+
+struct CanvasLabel [
+    x: Float,
+    y: Float,
+    text: Str,
+    style: Style
+]
+
+!!! Plotno: `width` x `height` komorek, osie w zakresach [x_min, x_max] i [y_min, y_max].
+!!! Rozdzielczosc zalezy od markera (Braille 2x4 na komorke, Half 1x2, reszta 1x1).
+struct Canvas [
+    width: Int,
+    height: Int,
+    marker: Int,
+    rx: Int,
+    ry: Int,
+    x_min: Float,
+    x_max: Float,
+    y_min: Float,
+    y_max: Float,
+    dots: List<Int>,
+    labels: List<CanvasLabel>,
+    style: Style,
+    block: Block,
+    has_block: Bool
+]
+
+fun canvas_new(width: Int, height: Int, marker: Int, x_min: Float, x_max: Float, y_min: Float, y_max: Float) -> Canvas [
+    let rx = 1
+    let ry = 1
+    if marker == 0 [
+        rx = 2
+        ry = 4
+    ] elif marker == 3 [
+        ry = 2
+    ]
+    let dots: List<Int> = []
+    let n = max_int(0, width) * rx * max_int(0, height) * ry
+    let i = 0
+    while i < n [
+        dots.push(0)
+        i = i + 1
+    ]
+    let labels: List<CanvasLabel> = []
+    end Canvas(width, height, marker, rx, ry, x_min, x_max, y_min, y_max, dots, labels, style_new(), block_new(), false)
+]
+
+fun canvas_set_block(c: Canvas, b: Block) [
+    c.block = b.clone()
+    c.has_block = true
+    end
+]
+
+fun canvas_set_style(c: Canvas, s: Style) [
+    c.style = s.clone()
+    end
+]
+
+!!! Punkt (x, y) w ukladzie wspolrzednych wykresu -> kolumna subpikseli.
+fun canvas_px(c: Canvas, x: Float) -> Int [
+    let span = c.x_max - c.x_min
+    if span <= 0.0 [
+        end 0
+    ]
+    end float_round(((x - c.x_min) / span) * ((c.width * c.rx - 1) as Float))
+]
+
+fun canvas_py(c: Canvas, y: Float) -> Int [
+    let span = c.y_max - c.y_min
+    if span <= 0.0 [
+        end 0
+    ]
+    end float_round(((c.y_max - y) / span) * ((c.height * c.ry - 1) as Float))
+]
+
+fun canvas_set_px(c: Canvas, px: Int, py: Int, color: Int) [
+    let pw = c.width * c.rx
+    let ph = c.height * c.ry
+    if px < 0 or py < 0 or px >= pw or py >= ph [
+        end
+    ]
+    let col = color
+    if col <= 0 [
+        col = 1
+    ]
+    let idx = py * pw + px
+    c.dots[idx] = col
+    end
+]
+
+fun canvas_point(c: Canvas, x: Float, y: Float, color: Int) [
+    let px = canvas_px(c, x)
+    let py = canvas_py(c, y)
+    canvas_set_px(c, px, py, color)
+    end
+]
+
+!!! Odcinek (Bresenham w subpikselach); fragmenty poza plotnem sa przycinane.
+fun canvas_line(c: Canvas, x1: Float, y1: Float, x2: Float, y2: Float, color: Int) [
+    let ax = canvas_px(c, x1)
+    let ay = canvas_py(c, y1)
+    let bx = canvas_px(c, x2)
+    let by = canvas_py(c, y2)
+    let dx = bx - ax
+    if dx < 0 [
+        dx = 0 - dx
+    ]
+    let dy = by - ay
+    if dy < 0 [
+        dy = 0 - dy
+    ]
+    let sx = 1
+    if ax > bx [
+        sx = -1
+    ]
+    let sy = 1
+    if ay > by [
+        sy = -1
+    ]
+    let err = dx - dy
+    let steps = 0
+    while steps < 100000 [
+        canvas_set_px(c, ax, ay, color)
+        if ax == bx and ay == by [
+            break
+        ]
+        let e2 = 2 * err
+        if e2 > 0 - dy [
+            err = err - dy
+            ax = ax + sx
+        ]
+        if e2 < dx [
+            err = err + dx
+            ay = ay + sy
+        ]
+        steps = steps + 1
+    ]
+    end
+]
+
+!!! Obrys prostokata o lewym dolnym rogu (x, y), szerokosci w i wysokosci h.
+fun canvas_rect(c: Canvas, x: Float, y: Float, w: Float, h: Float, color: Int) [
+    canvas_line(c, x, y, x + w, y, color)
+    canvas_line(c, x + w, y, x + w, y + h, color)
+    canvas_line(c, x + w, y + h, x, y + h, color)
+    canvas_line(c, x, y + h, x, y, color)
+    end
+]
+
+!!! Okrag (elipsa w jednostkach wykresu) o srodku (cx, cy) i promieniu r.
+fun canvas_circle(c: Canvas, cx: Float, cy: Float, r: Float, color: Int) [
+    let n = 96
+    let i = 0
+    let px = cx + r
+    let py = cy
+    while i < n [
+        let a = ((i + 1) as Float) * 6.283185307 / (n as Float)
+        let nx = cx + r * float_cos(a)
+        let ny = cy + r * float_sin(a)
+        canvas_line(c, px, py, nx, ny, color)
+        px = nx
+        py = ny
+        i = i + 1
+    ]
+    end
+]
+
+fun float_sin(a: Float) -> Float [
+    let out = 0.0
+    native {Rust} [
+        out = a.sin();
+    ]
+    end out
+]
+
+fun float_cos(a: Float) -> Float [
+    let out = 1.0
+    native {Rust} [
+        out = a.cos();
+    ]
+    end out
+]
+
+fun canvas_label(c: Canvas, x: Float, y: Float, text: Str, style: Style) [
+    c.labels.push(CanvasLabel(x, y, text.clone(), style.clone()))
+    end
+]
+
+fun canvas_clear(c: Canvas) [
+    let i = 0
+    while i < c.dots.len() [
+        c.dots[i] = 0
+        i = i + 1
+    ]
+    end
+]
+
+!!! Rysuje plotno w `area` (komorki spoza width x height sa pomijane).
+fun render_canvas(buf: Buffer, c: Canvas, area: Rect) [
+    let inner = area.clone()
+    if c.has_block [
+        render_block(buf, c.block, area)
+        inner = block_inner(c.block, area)
+    ]
+    buffer_set_style(buf, inner, c.style)
+    let pw = c.width * c.rx
+    let cy = 0
+    while cy < c.height and cy < inner.height [
+        let cx = 0
+        while cx < c.width and cx < inner.width [
+            let color = 0
+            let sx = 0
+            while sx < c.rx [
+                let sy = 0
+                while sy < c.ry [
+                    let col = c.dots[(cy * c.ry + sy) * pw + cx * c.rx + sx]
+                    if col != 0 [
+                        color = col
+                    ]
+                    sy = sy + 1
+                ]
+                sx = sx + 1
+            ]
+            if color != 0 [
+                let sym = "•"
+                if c.marker == 0 [
+                    sym = uni_braille(canvas_braille_bits(c, cx, cy))
+                ] elif c.marker == 2 [
+                    sym = "█"
+                ] elif c.marker == 3 [
+                    let top = c.dots[(cy * 2) * pw + cx]
+                    let bot = c.dots[(cy * 2 + 1) * pw + cx]
+                    sym = "█"
+                    if top != 0 and bot == 0 [
+                        sym = "▀"
+                    ] elif top == 0 and bot != 0 [
+                        sym = "▄"
+                    ]
+                ]
+                buffer_set_cell(buf, inner.x + cx, inner.y + cy, sym, style_of(color, 0, 0))
+            ]
+            cx = cx + 1
+        ]
+        cy = cy + 1
+    ]
+    let li = 0
+    while li < c.labels.len() [
+        let lb = c.labels[li].clone()
+        let sx2 = float_round(((lb.x - c.x_min) / max_float(0.0001, c.x_max - c.x_min)) * ((c.width - 1) as Float))
+        let sy2 = float_round(((c.y_max - lb.y) / max_float(0.0001, c.y_max - c.y_min)) * ((c.height - 1) as Float))
+        if sx2 >= 0 and sy2 >= 0 and sy2 < c.height [
+            buffer_set_string(buf, inner.x + sx2, inner.y + sy2, lb.text.clone(), lb.style, max_int(0, inner.width - sx2))
+        ]
+        li = li + 1
+    ]
+    end
+]
+
+fun max_float(a: Float, b: Float) -> Float [
+    if a > b [
+        end a
+    ]
+    end b
+]
+
+!!! Suma bitow Braille'a dla komorki (cx, cy): kropki (kolumna, wiersz) ->
+!!! (0,0)=1 (0,1)=2 (0,2)=4 (1,0)=8 (1,1)=16 (1,2)=32 (0,3)=64 (1,3)=128.
+fun canvas_braille_bits(c: Canvas, cx: Int, cy: Int) -> Int [
+    let pw = c.width * c.rx
+    let weights = [1, 2, 4, 64, 8, 16, 32, 128]
+    let sum = 0
+    let sx = 0
+    while sx < 2 [
+        let sy = 0
+        while sy < 4 [
+            if c.dots[(cy * 4 + sy) * pw + cx * 2 + sx] != 0 [
+                sum = sum + weights[sx * 4 + sy]
+            ]
+            sy = sy + 1
+        ]
+        sx = sx + 1
+    ]
+    end sum
+]
+
+!! -- Chart ------------------------------------------------------------------
+
+struct Axis [
+    title: Str,
+    min: Float,
+    max: Float,
+    labels: List<Str>,
+    style: Style
+]
+
+struct Dataset [
+    name: Str,
+    xs: List<Float>,
+    ys: List<Float>,
+    color: Int,
+    line: Bool
+]
+
+struct Chart [
+    datasets: List<Dataset>,
+    x_axis: Axis,
+    y_axis: Axis,
+    marker: Int,
+    legend: Bool,
+    style: Style,
+    block: Block,
+    has_block: Bool
+]
+
+fun axis_new(min: Float, max: Float) -> Axis [
+    let labels: List<Str> = []
+    end Axis("", min, max, labels, style_of(COLOR_GRAY, 0, 0))
+]
+
+fun axis_set_title(a: Axis, title: Str) [
+    a.title = title.clone()
+    end
+]
+
+fun axis_set_labels(a: Axis, labels: List<Str>) [
+    a.labels = labels.clone()
+    end
+]
+
+!!! Etykiety co `n` rowne odstepy z zakresu osi (np. 5 -> min, 25%, 50%, 75%, max).
+fun axis_auto_labels(a: Axis, n: Int, decimals: Int) [
+    let out: List<Str> = []
+    let i = 0
+    while i < n [
+        let v = a.min + (a.max - a.min) * (i as Float) / (max_int(1, n - 1) as Float)
+        out.push(fmt_num(v, decimals))
+        i = i + 1
+    ]
+    a.labels = out
+    end
+]
+
+!!! Zbior punktow (xs[i], ys[i]); `line = true` laczy je odcinkami.
+fun dataset_new(name: Str, xs: List<Float>, ys: List<Float>, color: Int, line: Bool) -> Dataset [
+    end Dataset(name.clone(), xs.clone(), ys.clone(), color, line)
+]
+
+fun chart_new(datasets: List<Dataset>, x_axis: Axis, y_axis: Axis) -> Chart [
+    end Chart(datasets.clone(), x_axis.clone(), y_axis.clone(), 0, true, style_new(), block_new(), false)
+]
+
+fun chart_set_block(c: Chart, b: Block) [
+    c.block = b.clone()
+    c.has_block = true
+    end
+]
+
+fun chart_set_marker(c: Chart, m: Int) [
+    c.marker = m
+    end
+]
+
+fun chart_set_legend(c: Chart, on: Bool) [
+    c.legend = on
+    end
+]
+
+fun axis_labels_width(a: Axis) -> Int [
+    let w = 0
+    let i = 0
+    while i < a.labels.len() [
+        w = max_int(w, uni_width(a.labels[i].clone()))
+        i = i + 1
+    ]
+    end w
+]
+
+fun render_chart(buf: Buffer, c: Chart, area: Rect) [
+    let inner = area.clone()
+    if c.has_block [
+        render_block(buf, c.block, area)
+        inner = block_inner(c.block, area)
+    ]
+    buffer_set_style(buf, inner, c.style)
+    if inner.width < 6 or inner.height < 4 [
+        end
+    ]
+    let ylw = axis_labels_width(c.y_axis)
+    let title_rows = 0
+    if c.y_axis.title != "" [
+        title_rows = 1
+    ]
+    let x0 = inner.x + ylw + 1
+    let y0 = inner.y + title_rows
+    let plot_w = inner.x + inner.width - x0
+    let plot_h = inner.height - title_rows - 2
+    if plot_w < 2 or plot_h < 2 [
+        end
+    ]
+    let ax = c.x_axis.style.clone()
+    let ay = c.y_axis.style.clone()
+    let i = 0
+    while i < plot_h [
+        buffer_set_cell(buf, x0 - 1, y0 + i, "│", ay)
+        i = i + 1
+    ]
+    i = 0
+    while i < plot_w [
+        buffer_set_cell(buf, x0 + i, y0 + plot_h, "─", ax)
+        i = i + 1
+    ]
+    buffer_set_cell(buf, x0 - 1, y0 + plot_h, "└", ax)
+    if c.y_axis.title != "" [
+        buffer_set_string(buf, inner.x, inner.y, c.y_axis.title.clone(), ay, inner.width)
+    ]
+    let yn = c.y_axis.labels.len()
+    i = 0
+    while i < yn [
+        let row = y0 + plot_h - 1
+        if yn > 1 [
+            row = y0 + plot_h - 1 - (i * (plot_h - 1)) / (yn - 1)
+        ]
+        let lw = uni_width(c.y_axis.labels[i].clone())
+        buffer_set_string(buf, x0 - 1 - lw, row, c.y_axis.labels[i].clone(), ay, lw)
+        i = i + 1
+    ]
+    let xn = c.x_axis.labels.len()
+    i = 0
+    while i < xn [
+        let lw2 = uni_width(c.x_axis.labels[i].clone())
+        let lx = x0
+        if xn > 1 [
+            lx = x0 + (i * (plot_w - 1)) / (xn - 1) - lw2 / 2
+        ]
+        if i == xn - 1 and xn > 1 [
+            lx = x0 + plot_w - lw2
+            if c.x_axis.title != "" [
+                lx = lx - uni_width(c.x_axis.title.clone()) - 1
+            ]
+        ]
+        if i == 0 [
+            lx = x0
+        ]
+        buffer_set_string(buf, max_int(x0, lx), y0 + plot_h + 1, c.x_axis.labels[i].clone(), ax, lw2)
+        i = i + 1
+    ]
+    if c.x_axis.title != "" [
+        let tw = uni_width(c.x_axis.title.clone())
+        buffer_set_string(buf, inner.x + inner.width - tw, inner.y + inner.height - 1, c.x_axis.title.clone(), ax, tw)
+    ]
+    let cv = canvas_new(plot_w, plot_h, c.marker, c.x_axis.min, c.x_axis.max, c.y_axis.min, c.y_axis.max)
+    let d = 0
+    while d < c.datasets.len() [
+        let ds = c.datasets[d].clone()
+        let k = 0
+        while k < ds.xs.len() and k < ds.ys.len() [
+            canvas_point(cv, ds.xs[k], ds.ys[k], ds.color)
+            if ds.line and k > 0 [
+                canvas_line(cv, ds.xs[k - 1], ds.ys[k - 1], ds.xs[k], ds.ys[k], ds.color)
+            ]
+            k = k + 1
+        ]
+        d = d + 1
+    ]
+    render_canvas(buf, cv, Rect(x0, y0, plot_w, plot_h))
+    if c.legend and c.datasets.len() > 0 [
+        let lw3 = 0
+        d = 0
+        while d < c.datasets.len() [
+            lw3 = max_int(lw3, uni_width(c.datasets[d].name.clone()) + 2)
+            d = d + 1
+        ]
+        d = 0
+        while d < c.datasets.len() and d < plot_h [
+            let nm = c.datasets[d].name.clone()
+            if nm != "" [
+                let lx2 = x0 + plot_w - lw3
+                buffer_set_string(buf, lx2, y0 + d, "• ", style_of(c.datasets[d].color, 0, 0), 2)
+                buffer_set_string(buf, lx2 + 2, y0 + d, nm, style_new(), lw3 - 2)
+            ]
+            d = d + 1
+        ]
+    ]
+    end
+]
