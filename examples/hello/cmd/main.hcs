@@ -1,0 +1,23 @@
+get <bit:mold>
+
+fun main() [
+    let term = terminal_init()
+    let running = true
+    while running [
+        let area = terminal_begin(term)
+        let blk = block_bordered()
+        block_set_title(blk, " mold ")
+        block_set_border_type(blk, BORDER_ROUNDED)
+        let p = paragraph_from_str("Hello, mold!\n\nNacisnij q, aby wyjsc.")
+        paragraph_set_block(p, blk)
+        paragraph_set_align(p, ALIGN_CENTER)
+        render_paragraph(term.buffer, p, rect_centered(area, 40, 7))
+        terminal_end(term)
+
+        let ev = event_poll(200)
+        if event_is_key(ev, "q") or event_is_ctrl(ev, "c") or ev.kind == "eof" [
+            running = false
+        ]
+    ]
+    terminal_restore(term)
+]
