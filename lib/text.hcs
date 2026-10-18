@@ -1,0 +1,133 @@
+include <geometry>
+include <style>
+include <backend>
+
+struct Span [
+    content: Str,
+    style: Style
+]
+
+struct Line [
+    spans: List<Span>,
+    style: Style,
+    align: Int
+]
+
+struct Text [
+    lines: List<Line>,
+    style: Style,
+    align: Int
+]
+
+const ALIGN_LEFT: Int = 0
+const ALIGN_CENTER: Int = 1
+const ALIGN_RIGHT: Int = 2
+
+fun span_raw(content: Str) -> Span [
+    end Span(content.clone(), style_new())
+]
+
+fun span_styled(content: Str, style: Style) -> Span [
+    end Span(content.clone(), style.clone())
+]
+
+fun span_width(s: Span) -> Int [
+    end uni_width(s.content.clone())
+]
+
+fun line_new() -> Line [
+    let spans: List<Span> = []
+    end Line(spans, style_new(), 0)
+]
+
+fun line_raw(content: Str) -> Line [
+    let spans: List<Span> = [span_raw(content.clone())]
+    end Line(spans, style_new(), 0)
+]
+
+fun line_styled(content: Str, style: Style) -> Line [
+    let spans: List<Span> = [span_raw(content.clone())]
+    end Line(spans, style.clone(), 0)
+]
+
+fun line_from_spans(spans: List<Span>) -> Line [
+    end Line(spans.clone(), style_new(), 0)
+]
+
+!!! Dopisuje span do linii.
+fun line_push(l: Line, s: Span) [
+    l.spans.push(s.clone())
+    end
+]
+
+fun line_set_align(l: Line, align: Int) [
+    l.align = align
+    end
+]
+
+fun line_width(l: Line) -> Int [
+    let w = 0
+    let i = 0
+    while i < l.spans.len() [
+        w = w + uni_width(l.spans[i].content.clone())
+        i = i + 1
+    ]
+    end w
+]
+
+!!! Cala zawartosc linii jako zwykly tekst.
+fun line_plain(l: Line) -> Str [
+    let out = ""
+    let i = 0
+    while i < l.spans.len() [
+        out = out + l.spans[i].content.clone()
+        i = i + 1
+    ]
+    end out
+]
+
+fun text_new() -> Text [
+    let lines: List<Line> = []
+    end Text(lines, style_new(), 0)
+]
+
+!!! Tekst z napisu - kazdy `\n` zaczyna nowa linie.
+fun text_raw(s: Str) -> Text [
+    let lines: List<Line> = []
+    let parts = uni_lines(s)
+    let i = 0
+    while i < parts.len() [
+        lines.push(line_raw(parts[i].clone()))
+        i = i + 1
+    ]
+    end Text(lines, style_new(), 0)
+]
+
+fun text_styled(s: Str, style: Style) -> Text [
+    let t = text_raw(s)
+    t.style = style.clone()
+    end t
+]
+
+fun text_from_lines(lines: List<Line>) -> Text [
+    end Text(lines.clone(), style_new(), 0)
+]
+
+fun text_push_line(t: Text, l: Line) [
+    t.lines.push(l.clone())
+    end
+]
+
+fun text_height(t: Text) -> Int [
+    end t.lines.len()
+]
+
+fun text_width(t: Text) -> Int [
+    let w = 0
+    let i = 0
+    while i < t.lines.len() [
+        w = max_int(w, line_width(t.lines[i].clone()))
+        i = i + 1
+    ]
+    end w
+]
