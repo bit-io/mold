@@ -1,0 +1,161 @@
+get <bit:mold>
+
+fun main() [
+    let term = terminal_init_mouse()
+    let tab = 0
+    let running = true
+    let popup = false
+    let tick = 0
+    let lst = list_state_new()
+    list_state_select(lst, 0)
+    let tst = table_state_new()
+    table_state_select(tst, 0)
+    let data: List<Int> = [3, 5, 2, 8, 6, 9, 4, 7, 5, 6, 3, 8, 9, 4, 2, 5]
+    let names = ["alfa", "beta", "gamma", "delta", "epsilon", "zeta", "eta", "theta"]
+
+    while running [
+        let area = terminal_begin(term)
+        let main_rows = layout_vertical([constraint_length(3), constraint_fill(1), constraint_length(1)], area)
+
+        let tabs = tabs_new(["Przeglad", "Tabela", "Tekst", "Wykresy"])
+        tabs_set_selected(tabs, tab)
+        let tb = block_bordered()
+        block_set_title(tb, " mold dashboard ")
+        tabs_set_block(tabs, tb)
+        render_tabs(term.buffer, tabs, main_rows[0])
+
+        let body = main_rows[1].clone()
+        if tab == 0 [
+            let cols = layout_horizontal([constraint_percentage(35), constraint_fill(1)], body)
+            let lb = block_bordered()
+            block_set_title(lb, " Lista ")
+            let lw = list_widget_from_strs(names)
+            list_widget_set_block(lw, lb)
+            list_widget_set_highlight_symbol(lw, "> ")
+            list_widget_set_highlight_style(lw, style_of(COLOR_BLACK, COLOR_CYAN, MOD_BOLD))
+            render_list(term.buffer, lw, cols[0], lst)
+
+            let right = layout_vertical([constraint_length(3), constraint_length(6), constraint_fill(1)], cols[1])
+            let g = gauge_new()
+            gauge_set_percent(g, (tick * 3) % 101)
+            let gb = block_bordered()
+            block_set_title(gb, " Gauge ")
+            gauge_set_block(g, gb)
+            render_gauge(term.buffer, g, right[0])
+
+            let sp = sparkline_new(data)
+            let sb = block_bordered()
+            block_set_title(sb, " Sparkline ")
+            sparkline_set_block(sp, sb)
+            sparkline_set_style(sp, style_of(COLOR_YELLOW, 0, 0))
+            render_sparkline(term.buffer, sp, right[1])
+
+            let bc = barchart_new([bar_new("pn", 4), bar_new("wt", 7), bar_new("sr", 5), bar_new("cz", 9), bar_new("pt", 6)])
+            let bb = block_bordered()
+            block_set_title(bb, " BarChart ")
+            barchart_set_block(bc, bb)
+            render_barchart(term.buffer, bc, right[2])
+        ] elif tab == 1 [
+            let rows = [row_from_strs(["1", "alfa", "ok"]), row_from_strs(["2", "beta", "ok"]), row_from_strs(["3", "gamma", "blad"]), row_from_strs(["4", "delta", "ok"])]
+            let t = table_new(rows, [constraint_length(4), constraint_fill(1), constraint_length(6)])
+            table_set_header(t, row_from_strs(["Id", "Nazwa", "Stan"]))
+            table_set_highlight_symbol(t, ">> ")
+            table_set_highlight_style(t, style_of(0, COLOR_BLUE, MOD_BOLD))
+            let tbk = block_bordered()
+            block_set_title(tbk, " Tabela ")
+            table_set_block(t, tbk)
+            render_table(term.buffer, t, body, tst)
+        ] elif tab == 2 [
+            let spans = [span_raw("Zażółć gęślą jaźń - "), span_styled("kolorowy", style_of(COLOR_RED, 0, MOD_BOLD)), span_raw(" tekst z zawijaniem wierszy, znakami 漢字 oraz stylami.")]
+            let p = paragraph_new(text_from_lines([line_from_spans(spans), line_raw(""), line_raw("Druga linia.")]))
+            paragraph_set_wrap(p, true)
+            let pb = block_bordered()
+            block_set_title(pb, " Paragraph ")
+            paragraph_set_block(p, pb)
+            render_paragraph(term.buffer, p, body)
+        ] else [
+            let cols = layout_horizontal([constraint_fill(2), constraint_length(26)], body)
+            let xs: List<Float> = []
+            let ys: List<Float> = []
+            let ys2: List<Float> = []
+            let i = 0
+            while i <= 60 [
+                let x = (i as Float) * 0.2
+                xs.push(x)
+                ys.push(float_sin(x + (tick as Float) * 0.1))
+                ys2.push(float_cos(x) * 0.5)
+                i = i + 1
+            ]
+            let xa = axis_new(0.0, 12.0)
+            axis_auto_labels(xa, 4, 0)
+            axis_set_title(xa, "t")
+            let ya = axis_new(-1.0, 1.0)
+            axis_auto_labels(ya, 3, 1)
+            let ch = chart_new([dataset_new("sin", xs, ys, COLOR_CYAN, true), dataset_new("cos/2", xs, ys2, COLOR_YELLOW, true)], xa, ya)
+            chart_set_block(ch, block_titled(" Chart "))
+            render_chart(term.buffer, ch, cols[0])
+
+            let side = layout_vertical([constraint_length(9), constraint_fill(1)], cols[1])
+            let cal = calendar_new(2026, 10)
+            calendar_set_today(cal, 17)
+            calendar_add_event(cal, 5, style_of(COLOR_RED, 0, 0))
+            calendar_add_event(cal, 24, style_of(COLOR_GREEN, 0, 0))
+            calendar_set_block(cal, block_titled(" Calendar "))
+            render_calendar(term.buffer, cal, side[0])
+
+            let cv = canvas_new(24, 8, MARKER_BRAILLE, 0.0, 10.0, 0.0, 10.0)
+            canvas_rect(cv, 0.5, 0.5, 9.0, 9.0, COLOR_GREEN)
+            canvas_circle(cv, 5.0, 5.0, 3.0 + float_sin((tick as Float) * 0.2), COLOR_MAGENTA)
+            canvas_line(cv, 0.5, 0.5, 9.5, 9.5, COLOR_YELLOW)
+            render_canvas(term.buffer, cv, side[1])
+        ]
+
+        let help = paragraph_from_str(" Tab: zakladki | j/k: lista | ?: pomoc | q: wyjscie ")
+        paragraph_set_style(help, style_of(COLOR_BLACK, COLOR_GRAY, 0))
+        render_paragraph(term.buffer, help, main_rows[2])
+
+        if popup [
+            let pa = rect_centered(area, 44, 7)
+            render_clear(term.buffer, pa)
+            let pbk = block_bordered()
+            block_set_title(pbk, " Pomoc ")
+            block_set_border_type(pbk, BORDER_DOUBLE)
+            let pp = paragraph_from_str("Popup rysowany nad reszta UI.\nDowolny klawisz go zamyka.")
+            paragraph_set_block(pp, pbk)
+            render_paragraph(term.buffer, pp, pa)
+        ]
+        terminal_end(term)
+
+        let ev = event_poll(100)
+        if ev.kind == "none" [
+            tick = tick + 1
+        ] elif ev.kind == "eof" [
+            running = false
+        ] elif ev.kind == "key" [
+            if popup [
+                popup = false
+            ] elif event_is_key(ev, "q") or event_is_ctrl(ev, "c") [
+                running = false
+            ] elif event_is_key(ev, "Tab") [
+                tab = (tab + 1) % 4
+            ] elif event_is_key(ev, "BackTab") [
+                tab = (tab + 3) % 4
+            ] elif event_is_key(ev, "?") [
+                popup = true
+            ] elif event_is_key(ev, "j") or event_is_key(ev, "Down") [
+                list_state_next(lst, 8)
+                table_state_next(tst, 4)
+            ] elif event_is_key(ev, "k") or event_is_key(ev, "Up") [
+                list_state_previous(lst, 8)
+                table_state_previous(tst, 4)
+            ]
+        ] elif ev.kind == "mouse_scroll" [
+            if ev.code == "ScrollDown" [
+                list_state_next(lst, 8)
+            ] else [
+                list_state_previous(lst, 8)
+            ]
+        ]
+    ]
+    terminal_restore(term)
+]
