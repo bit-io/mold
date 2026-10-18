@@ -1,0 +1,256 @@
+fun min_int(a: Int, b: Int) -> Int [
+    if a < b [
+        end a
+    ]
+    end b
+]
+
+fun max_int(a: Int, b: Int) -> Int [
+    if a > b [
+        end a
+    ]
+    end b
+]
+
+!!! Prostokat w komorkach terminala (x, y = lewy gorny rog).
+struct Rect [
+    x: Int,
+    y: Int,
+    width: Int,
+    height: Int
+]
+
+fun rect_new(x: Int, y: Int, width: Int, height: Int) -> Rect [
+    end Rect(x, y, width, height)
+]
+
+fun rect_area(r: Rect) -> Int [
+    end r.width * r.height
+]
+
+fun rect_right(r: Rect) -> Int [
+    end r.x + r.width
+]
+
+fun rect_bottom(r: Rect) -> Int [
+    end r.y + r.height
+]
+
+fun rect_is_empty(r: Rect) -> Bool [
+    end r.width <= 0 or r.height <= 0
+]
+
+fun rect_contains(r: Rect, px: Int, py: Int) -> Bool [
+    end px >= r.x and px < r.x + r.width and py >= r.y and py < r.y + r.height
+]
+
+!!! Zmniejsza prostokat o margines poziomy `h` i pionowy `v` z kazdej strony.
+fun rect_margin(r: Rect, h: Int, v: Int) -> Rect [
+    let w = max_int(0, r.width - 2 * h)
+    let ht = max_int(0, r.height - 2 * v)
+    end Rect(r.x + h, r.y + v, w, ht)
+]
+
+!!! Czesc wspolna dwoch prostokatow (pusty gdy rozlaczne).
+fun rect_intersection(a: Rect, b: Rect) -> Rect [
+    let x1 = max_int(a.x, b.x)
+    let y1 = max_int(a.y, b.y)
+    let x2 = min_int(a.x + a.width, b.x + b.width)
+    let y2 = min_int(a.y + a.height, b.y + b.height)
+    if x2 <= x1 or y2 <= y1 [
+        end Rect(x1, y1, 0, 0)
+    ]
+    end Rect(x1, y1, x2 - x1, y2 - y1)
+]
+
+!!! Najmniejszy prostokat zawierajacy oba.
+fun rect_union(a: Rect, b: Rect) -> Rect [
+    let x1 = min_int(a.x, b.x)
+    let y1 = min_int(a.y, b.y)
+    let x2 = max_int(a.x + a.width, b.x + b.width)
+    let y2 = max_int(a.y + a.height, b.y + b.height)
+    end Rect(x1, y1, x2 - x1, y2 - y1)
+]
+
+!!! Prostokat `width` x `height` wysrodkowany w `area` (okna modalne/popupy).
+fun rect_centered(area: Rect, width: Int, height: Int) -> Rect [
+    let w = min_int(width, area.width)
+    let h = min_int(height, area.height)
+    end Rect(area.x + (area.width - w) / 2, area.y + (area.height - h) / 2, w, h)
+]
+
+!!! Prostokat wysrodkowany o procentowym rozmiarze `px` x `py` (0..100).
+fun rect_centered_percent(area: Rect, px: Int, py: Int) -> Rect [
+    end rect_centered(area, (area.width * px) / 100, (area.height * py) / 100)
+]
+
+!! -- Constraint -------------------------------------------------------------
+
+!!! Ograniczenie rozmiaru. kind: 0 Length, 1 Percentage, 2 Ratio, 3 Min,
+!!! 4 Max, 5 Fill (a = waga). Twórz przez `constraint_*`.
+struct Constraint [
+    kind: Int,
+    a: Int,
+    b: Int
+]
+
+fun constraint_length(n: Int) -> Constraint [
+    end Constraint(0, n, 0)
+]
+
+fun constraint_percentage(p: Int) -> Constraint [
+    end Constraint(1, p, 0)
+]
+
+fun constraint_ratio(num: Int, den: Int) -> Constraint [
+    end Constraint(2, num, den)
+]
+
+fun constraint_min(n: Int) -> Constraint [
+    end Constraint(3, n, 0)
+]
+
+fun constraint_max(n: Int) -> Constraint [
+    end Constraint(4, n, 0)
+]
+
+fun constraint_fill(weight: Int) -> Constraint [
+    end Constraint(5, weight, 0)
+]
+
+!!! Rozwiazuje ograniczenia do rozmiarow (suma <= total). Length/Percentage/
+!!! Ratio sa stale, Min/Max/Fill dziela reszte proporcjonalnie (Max z sufitem).
+fun solve_sizes(total: Int, cs: List<Constraint>) -> List<Int> [
+    let n = cs.len()
+    let sizes: List<Int> = []
+    let weights: List<Int> = []
+    let sat: List<Int> = []
+    let fixed = 0
+    let i = 0
+    while i < n [
+        let k = cs[i].kind
+        let a = cs[i].a
+        let b = cs[i].b
+        let s = 0
+        let w = 0
+        if k == 0 [
+            s = a
+        ] elif k == 1 [
+            s = (total * a) / 100
+        ] elif k == 2 [
+            if b != 0 [
+                s = (total * a) / b
+            ]
+        ] elif k == 3 [
+            s = a
+            w = 1
+        ] elif k == 4 [
+            w = 1
+        ] else [
+            w = a
+            if w < 1 [
+                w = 1
+            ]
+        ]
+        if s < 0 [
+            s = 0
+        ]
+        sizes.push(s)
+        weights.push(w)
+        sat.push(0)
+        fixed = fixed + s
+        i = i + 1
+    ]
+    let rem = total - fixed
+    let round = 0
+    while rem > 0 and round < 4 [
+        let wsum = 0
+        let j = 0
+        while j < n [
+            if weights[j] > 0 and sat[j] == 0 [
+                wsum = wsum + weights[j]
+            ]
+            j = j + 1
+        ]
+        if wsum == 0 [
+            break
+        ]
+        let given = 0
+        let q = 0
+        while q < n [
+            if weights[q] > 0 and sat[q] == 0 [
+                let share = (rem * weights[q]) / wsum
+                if cs[q].kind == 4 and sizes[q] + share > cs[q].a [
+                    share = max_int(0, cs[q].a - sizes[q])
+                    sat[q] = 1
+                ]
+                sizes[q] = sizes[q] + share
+                given = given + share
+            ]
+            q = q + 1
+        ]
+        rem = rem - given
+        round = round + 1
+    ]
+    if rem > 0 [
+        let last = -1
+        let z = 0
+        while z < n [
+            if weights[z] > 0 and sat[z] == 0 [
+                last = z
+            ]
+            z = z + 1
+        ]
+        if last >= 0 [
+            sizes[last] = sizes[last] + rem
+        ]
+    ]
+    let over = fixed - total
+    let r = n - 1
+    while over > 0 and r >= 0 [
+        let cut = min_int(sizes[r], over)
+        sizes[r] = sizes[r] - cut
+        over = over - cut
+        r = r - 1
+    ]
+    end sizes
+]
+
+!!! Dzieli `area` wedlug `cs` poziomo (`horizontal = true`) lub pionowo.
+fun layout_split(area: Rect, horizontal: Bool, cs: List<Constraint>, margin: Int, spacing: Int) -> List<Rect> [
+    let inner = rect_margin(area, margin, margin)
+    let n = cs.len()
+    let total = inner.height
+    if horizontal [
+        total = inner.width
+    ]
+    let gaps = 0
+    if n > 1 [
+        gaps = spacing * (n - 1)
+    ]
+    let sizes = solve_sizes(max_int(0, total - gaps), cs)
+    let out: List<Rect> = []
+    let pos = inner.y
+    if horizontal [
+        pos = inner.x
+    ]
+    let i = 0
+    while i < n [
+        if horizontal [
+            out.push(Rect(pos, inner.y, sizes[i], inner.height))
+        ] else [
+            out.push(Rect(inner.x, pos, inner.width, sizes[i]))
+        ]
+        pos = pos + sizes[i] + spacing
+        i = i + 1
+    ]
+    end out
+]
+
+fun layout_horizontal(cs: List<Constraint>, area: Rect) -> List<Rect> [
+    end layout_split(area, true, cs, 0, 0)
+]
+
+fun layout_vertical(cs: List<Constraint>, area: Rect) -> List<Rect> [
+    end layout_split(area, false, cs, 0, 0)
+]
