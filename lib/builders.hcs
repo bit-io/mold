@@ -1,0 +1,330 @@
+include <style>
+include <geometry>
+include <backend>
+include <text>
+include <buffer>
+include <widget_block>
+include <widget_paragraph>
+include <widget_list>
+include <widget_misc>
+include <widget_canvas>
+include <widget_calendar>
+
+!! -- Block ------------------------------------------------------------------
+
+!!! Blok z ramkami i tytulem w jednym wywolaniu.
+fun block_titled(title: Str) -> Block [
+    let b = block_bordered()
+    block_set_title(b, title)
+    end b
+]
+
+fun block_with_title(b: Block, title: Str) -> Block [
+    let o = b.clone()
+    block_set_title(o, title)
+    end o
+]
+
+fun block_with_title_bottom(b: Block, title: Str) -> Block [
+    let o = b.clone()
+    block_set_title_bottom(o, title)
+    end o
+]
+
+fun block_with_title_align(b: Block, align: Int) -> Block [
+    let o = b.clone()
+    block_set_title_align(o, align)
+    end o
+]
+
+fun block_with_borders(b: Block, borders: Int) -> Block [
+    let o = b.clone()
+    block_set_borders(o, borders)
+    end o
+]
+
+fun block_with_border_type(b: Block, btype: Int) -> Block [
+    let o = b.clone()
+    block_set_border_type(o, btype)
+    end o
+]
+
+fun block_with_style(b: Block, style: Style) -> Block [
+    let o = b.clone()
+    block_set_style(o, style)
+    end o
+]
+
+fun block_with_border_style(b: Block, style: Style) -> Block [
+    let o = b.clone()
+    block_set_border_style(o, style)
+    end o
+]
+
+fun block_with_padding(b: Block, left: Int, right: Int, top: Int, bottom: Int) -> Block [
+    let o = b.clone()
+    block_set_padding(o, left, right, top, bottom)
+    end o
+]
+
+!! -- Paragraph --------------------------------------------------------------
+
+fun paragraph_with_block(p: Paragraph, b: Block) -> Paragraph [
+    let o = p.clone()
+    paragraph_set_block(o, b)
+    end o
+]
+
+fun paragraph_with_style(p: Paragraph, s: Style) -> Paragraph [
+    let o = p.clone()
+    paragraph_set_style(o, s)
+    end o
+]
+
+fun paragraph_with_wrap(p: Paragraph, trim: Bool) -> Paragraph [
+    let o = p.clone()
+    paragraph_set_wrap(o, trim)
+    end o
+]
+
+fun paragraph_with_scroll(p: Paragraph, y: Int, x: Int) -> Paragraph [
+    let o = p.clone()
+    paragraph_set_scroll(o, y, x)
+    end o
+]
+
+fun paragraph_with_align(p: Paragraph, align: Int) -> Paragraph [
+    let o = p.clone()
+    paragraph_set_align(o, align)
+    end o
+]
+
+!! -- ListWidget -------------------------------------------------------------
+
+fun list_widget_with_block(l: ListWidget, b: Block) -> ListWidget [
+    let o = l.clone()
+    list_widget_set_block(o, b)
+    end o
+]
+
+fun list_widget_with_style(l: ListWidget, s: Style) -> ListWidget [
+    let o = l.clone()
+    list_widget_set_style(o, s)
+    end o
+]
+
+fun list_widget_with_highlight_style(l: ListWidget, s: Style) -> ListWidget [
+    let o = l.clone()
+    list_widget_set_highlight_style(o, s)
+    end o
+]
+
+fun list_widget_with_highlight_symbol(l: ListWidget, sym: Str) -> ListWidget [
+    let o = l.clone()
+    list_widget_set_highlight_symbol(o, sym)
+    end o
+]
+
+!! -- Table ------------------------------------------------------------------
+
+fun table_with_header(t: Table, h: Row) -> Table [
+    let o = t.clone()
+    table_set_header(o, h)
+    end o
+]
+
+fun table_with_block(t: Table, b: Block) -> Table [
+    let o = t.clone()
+    table_set_block(o, b)
+    end o
+]
+
+fun table_with_style(t: Table, s: Style) -> Table [
+    let o = t.clone()
+    table_set_style(o, s)
+    end o
+]
+
+fun table_with_highlight_style(t: Table, s: Style) -> Table [
+    let o = t.clone()
+    table_set_highlight_style(o, s)
+    end o
+]
+
+fun table_with_highlight_symbol(t: Table, sym: Str) -> Table [
+    let o = t.clone()
+    table_set_highlight_symbol(o, sym)
+    end o
+]
+
+fun table_with_column_spacing(t: Table, n: Int) -> Table [
+    let o = t.clone()
+    table_set_column_spacing(o, n)
+    end o
+]
+
+fun row_with_style(r: Row, s: Style) -> Row [
+    let o = r.clone()
+    row_set_style(o, s)
+    end o
+]
+
+fun row_with_bottom_margin(r: Row, m: Int) -> Row [
+    let o = r.clone()
+    row_set_bottom_margin(o, m)
+    end o
+]
+
+!! -- Gauge / Tabs / Sparkline / BarChart ----------------------------------
+
+fun gauge_with_percent(g: Gauge, p: Int) -> Gauge [
+    let o = g.clone()
+    gauge_set_percent(o, p)
+    end o
+]
+
+fun gauge_with_label(g: Gauge, s: Str) -> Gauge [
+    let o = g.clone()
+    gauge_set_label(o, s)
+    end o
+]
+
+fun gauge_with_gauge_style(g: Gauge, s: Style) -> Gauge [
+    let o = g.clone()
+    gauge_set_gauge_style(o, s)
+    end o
+]
+
+fun gauge_with_block(g: Gauge, b: Block) -> Gauge [
+    let o = g.clone()
+    gauge_set_block(o, b)
+    end o
+]
+
+fun tabs_with_selected(t: Tabs, idx: Int) -> Tabs [
+    let o = t.clone()
+    tabs_set_selected(o, idx)
+    end o
+]
+
+fun tabs_with_highlight_style(t: Tabs, s: Style) -> Tabs [
+    let o = t.clone()
+    tabs_set_highlight_style(o, s)
+    end o
+]
+
+fun tabs_with_divider(t: Tabs, d: Str) -> Tabs [
+    let o = t.clone()
+    tabs_set_divider(o, d)
+    end o
+]
+
+fun tabs_with_block(t: Tabs, b: Block) -> Tabs [
+    let o = t.clone()
+    tabs_set_block(o, b)
+    end o
+]
+
+fun sparkline_with_max(s: Sparkline, m: Int) -> Sparkline [
+    let o = s.clone()
+    sparkline_set_max(o, m)
+    end o
+]
+
+fun sparkline_with_style(s: Sparkline, st: Style) -> Sparkline [
+    let o = s.clone()
+    sparkline_set_style(o, st)
+    end o
+]
+
+fun sparkline_with_block(s: Sparkline, b: Block) -> Sparkline [
+    let o = s.clone()
+    sparkline_set_block(o, b)
+    end o
+]
+
+fun barchart_with_bar_width(c: BarChart, w: Int) -> BarChart [
+    let o = c.clone()
+    barchart_set_bar_width(o, w)
+    end o
+]
+
+fun barchart_with_bar_gap(c: BarChart, g: Int) -> BarChart [
+    let o = c.clone()
+    barchart_set_bar_gap(o, g)
+    end o
+]
+
+fun barchart_with_max(c: BarChart, m: Int) -> BarChart [
+    let o = c.clone()
+    barchart_set_max(o, m)
+    end o
+]
+
+fun barchart_with_block(c: BarChart, b: Block) -> BarChart [
+    let o = c.clone()
+    barchart_set_block(o, b)
+    end o
+]
+
+!! -- Chart / Calendar ---------------------------------------------------------
+
+fun chart_with_block(c: Chart, b: Block) -> Chart [
+    let o = c.clone()
+    chart_set_block(o, b)
+    end o
+]
+
+fun chart_with_marker(c: Chart, m: Int) -> Chart [
+    let o = c.clone()
+    chart_set_marker(o, m)
+    end o
+]
+
+fun chart_with_legend(c: Chart, on: Bool) -> Chart [
+    let o = c.clone()
+    chart_set_legend(o, on)
+    end o
+]
+
+fun axis_with_title(a: Axis, title: Str) -> Axis [
+    let o = a.clone()
+    axis_set_title(o, title)
+    end o
+]
+
+fun axis_with_labels(a: Axis, labels: List<Str>) -> Axis [
+    let o = a.clone()
+    axis_set_labels(o, labels)
+    end o
+]
+
+fun calendar_with_block(c: Calendar, b: Block) -> Calendar [
+    let o = c.clone()
+    calendar_set_block(o, b)
+    end o
+]
+
+fun calendar_with_selected(c: Calendar, day: Int) -> Calendar [
+    let o = c.clone()
+    calendar_set_selected(o, day)
+    end o
+]
+
+fun calendar_with_today(c: Calendar, day: Int) -> Calendar [
+    let o = c.clone()
+    calendar_set_today(o, day)
+    end o
+]
+
+fun calendar_with_event(c: Calendar, day: Int, style: Style) -> Calendar [
+    let o = c.clone()
+    calendar_add_event(o, day, style)
+    end o
+]
+
+fun calendar_with_lang(c: Calendar, lang: Int) -> Calendar [
+    let o = c.clone()
+    calendar_set_lang(o, lang)
+    end o
+]
