@@ -1,1 +1,27 @@
+[package]
+-> name        => mold
+-> version     => 0.1.0
+-> description => TUI library inspired by ratatui: Buffer, Layout, Style and widgets (Block, Paragraph, List, Table, Gauge, Tabs, Sparkline, BarChart, Scrollbar, Canvas, Chart, Calendar). Written in HackerScript.
+-> authors     => ["Bit Developers"]
+-> license     => MIT
+-> lang        => HackerScript
 
+[layout]
+-> lib => lib
+
+[lib]
+-> output => hlib
+
+[build]
+-> link => static
+
+[default-build]
+-> profile => release
+
+[commands]
+-> test
+--> run => cd examples/render-test && bit
+--> description => Render widgets to a Buffer and assert the result (no terminal needed)
+-> demo
+--> run => cd examples/dashboard && bit
+--> description => Run the interactive dashboard example
