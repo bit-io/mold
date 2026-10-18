@@ -1,0 +1,7 @@
+[package]
+-> name => render-test
+-> version => 0.1.0
+-> lang => HackerScript
+
+[dependencies]
+-> mold => newest
