@@ -1,0 +1,8 @@
+[package]
+-> name => hello
+-> version => 0.1.0
+-> description => Przyklad mold: hello
+-> lang => HackerScript
+
+[dependencies]
+-> mold => newest
