@@ -1,0 +1,230 @@
+include <style>
+include <geometry>
+include <backend>
+include <text>
+include <buffer>
+
+const BORDER_NONE: Int = 0
+const BORDER_TOP: Int = 1
+const BORDER_RIGHT: Int = 2
+const BORDER_BOTTOM: Int = 4
+const BORDER_LEFT: Int = 8
+const BORDER_ALL: Int = 15
+
+const BORDER_PLAIN: Int = 0
+const BORDER_ROUNDED: Int = 1
+const BORDER_DOUBLE: Int = 2
+const BORDER_THICK: Int = 3
+
+struct Block [
+    borders: Int,
+    btype: Int,
+    title: Line,
+    title_bottom: Line,
+    title_align: Int,
+    title_bottom_align: Int,
+    style: Style,
+    border_style: Style,
+    pad_left: Int,
+    pad_right: Int,
+    pad_top: Int,
+    pad_bottom: Int
+]
+
+!!! Pusty blok bez ramek (jak `Block::default()`).
+fun block_new() -> Block [
+    end Block(0, 0, line_new(), line_new(), 0, 0, style_new(), style_new(), 0, 0, 0, 0)
+]
+
+!!! Blok ze wszystkimi ramkami (jak `Block::bordered()`).
+fun block_bordered() -> Block [
+    let b = block_new()
+    b.borders = 15
+    end b
+]
+
+fun block_set_borders(b: Block, borders: Int) [
+    b.borders = borders
+    end
+]
+
+fun block_set_border_type(b: Block, btype: Int) [
+    b.btype = btype
+    end
+]
+
+fun block_set_title(b: Block, title: Str) [
+    b.title = line_raw(title)
+    end
+]
+
+fun block_set_title_line(b: Block, title: Line) [
+    b.title = title.clone()
+    end
+]
+
+fun block_set_title_bottom(b: Block, title: Str) [
+    b.title_bottom = line_raw(title)
+    end
+]
+
+fun block_set_title_align(b: Block, align: Int) [
+    b.title_align = align
+    end
+]
+
+fun block_set_style(b: Block, style: Style) [
+    b.style = style.clone()
+    end
+]
+
+fun block_set_border_style(b: Block, style: Style) [
+    b.border_style = style.clone()
+    end
+]
+
+fun block_set_padding(b: Block, left: Int, right: Int, top: Int, bottom: Int) [
+    b.pad_left = left
+    b.pad_right = right
+    b.pad_top = top
+    b.pad_bottom = bottom
+    end
+]
+
+!!! Znaki ramki: [pozioma, pionowa, lg, pg, ld, pd].
+fun border_chars(btype: Int) -> List<Str> [
+    if btype == 1 [
+        end ["─", "│", "╭", "╮", "╰", "╯"]
+    ]
+    if btype == 2 [
+        end ["═", "║", "╔", "╗", "╚", "╝"]
+    ]
+    if btype == 3 [
+        end ["━", "┃", "┏", "┓", "┗", "┛"]
+    ]
+    end ["─", "│", "┌", "┐", "└", "┘"]
+]
+
+!!! Obszar wewnatrz bloku (bez ramek i paddingu) - tu rysuj zawartosc.
+fun block_inner(b: Block, area: Rect) -> Rect [
+    let l = b.pad_left
+    let r = b.pad_right
+    let t = b.pad_top
+    let bt = b.pad_bottom
+    if mods_has(b.borders, 8) [
+        l = l + 1
+    ]
+    if mods_has(b.borders, 2) [
+        r = r + 1
+    ]
+    if mods_has(b.borders, 1) [
+        t = t + 1
+    ]
+    if mods_has(b.borders, 4) [
+        bt = bt + 1
+    ]
+    end Rect(area.x + l, area.y + t, max_int(0, area.width - l - r), max_int(0, area.height - t - bt))
+]
+
+fun block_title_x(area: Rect, borders: Int, title_w: Int, align: Int) -> Int [
+    let x0 = area.x
+    let avail = area.width
+    if mods_has(borders, 8) [
+        x0 = x0 + 1
+        avail = avail - 1
+    ]
+    if mods_has(borders, 2) [
+        avail = avail - 1
+    ]
+    if align == 1 [
+        end x0 + max_int(0, (avail - title_w) / 2)
+    ]
+    if align == 2 [
+        end x0 + max_int(0, avail - title_w)
+    ]
+    end x0
+]
+
+fun block_title_avail(area: Rect, borders: Int) -> Int [
+    let avail = area.width
+    if mods_has(borders, 8) [
+        avail = avail - 1
+    ]
+    if mods_has(borders, 2) [
+        avail = avail - 1
+    ]
+    end max_int(0, avail)
+]
+
+!!! Rysuje blok (tlo, ramki, tytuly) w `area`.
+fun render_block(buf: Buffer, b: Block, area: Rect) [
+    let a = rect_intersection(area, buf.area)
+    if rect_is_empty(a) [
+        end
+    ]
+    buffer_set_style(buf, a, b.style)
+    let ch = border_chars(b.btype)
+    let bs = b.border_style
+    let right = a.x + a.width - 1
+    let bottom = a.y + a.height - 1
+    let x = a.x
+    if mods_has(b.borders, 1) [
+        x = a.x
+        while x <= right [
+            buffer_set_cell(buf, x, a.y, ch[0].clone(), bs)
+            x = x + 1
+        ]
+    ]
+    if mods_has(b.borders, 4) [
+        x = a.x
+        while x <= right [
+            buffer_set_cell(buf, x, bottom, ch[0].clone(), bs)
+            x = x + 1
+        ]
+    ]
+    let y = a.y
+    if mods_has(b.borders, 8) [
+        y = a.y
+        while y <= bottom [
+            buffer_set_cell(buf, a.x, y, ch[1].clone(), bs)
+            y = y + 1
+        ]
+    ]
+    if mods_has(b.borders, 2) [
+        y = a.y
+        while y <= bottom [
+            buffer_set_cell(buf, right, y, ch[1].clone(), bs)
+            y = y + 1
+        ]
+    ]
+    if mods_has(b.borders, 1) and mods_has(b.borders, 8) [
+        buffer_set_cell(buf, a.x, a.y, ch[2].clone(), bs)
+    ]
+    if mods_has(b.borders, 1) and mods_has(b.borders, 2) [
+        buffer_set_cell(buf, right, a.y, ch[3].clone(), bs)
+    ]
+    if mods_has(b.borders, 4) and mods_has(b.borders, 8) [
+        buffer_set_cell(buf, a.x, bottom, ch[4].clone(), bs)
+    ]
+    if mods_has(b.borders, 4) and mods_has(b.borders, 2) [
+        buffer_set_cell(buf, right, bottom, ch[5].clone(), bs)
+    ]
+    let avail = block_title_avail(a, b.borders)
+    let tw = line_width(b.title)
+    if tw > 0 [
+        let tx = block_title_x(a, b.borders, min_int(tw, avail), b.title_align)
+        buffer_set_line(buf, tx, a.y, b.title, avail)
+    ]
+    let bw = line_width(b.title_bottom)
+    if bw > 0 [
+        let bx = block_title_x(a, b.borders, min_int(bw, avail), b.title_bottom_align)
+        buffer_set_line(buf, bx, bottom, b.title_bottom, avail)
+    ]
+    end
+]
+
+!!! Czysci `area` (jak widget `Clear`) - uzywaj pod popupami.
+fun render_clear(buf: Buffer, area: Rect) [
+    buffer_clear_area(buf, area)
+    end
+]
