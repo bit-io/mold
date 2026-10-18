@@ -1,0 +1,406 @@
+include <style>
+include <geometry>
+include <backend>
+include <text>
+include <buffer>
+include <widget_block>
+
+!! -- Gauge ------------------------------------------------------------------
+
+!!! Pasek postepu. `permille` 0..1000.
+struct Gauge [
+    permille: Int,
+    label: Str,
+    style: Style,
+    gauge_style: Style,
+    block: Block,
+    has_block: Bool
+]
+
+fun gauge_new() -> Gauge [
+    end Gauge(0, "", style_new(), style_of(COLOR_GREEN, 0, 0), block_new(), false)
+]
+
+fun gauge_set_percent(g: Gauge, p: Int) [
+    g.permille = min_int(1000, max_int(0, p * 10))
+    end
+]
+
+fun gauge_set_ratio(g: Gauge, r: Float) [
+    g.permille = min_int(1000, max_int(0, (r * 1000.0) as Int))
+    end
+]
+
+fun gauge_set_label(g: Gauge, s: Str) [
+    g.label = s.clone()
+    end
+]
+
+fun gauge_set_gauge_style(g: Gauge, s: Style) [
+    g.gauge_style = s.clone()
+    end
+]
+
+fun gauge_set_block(g: Gauge, b: Block) [
+    g.block = b.clone()
+    g.has_block = true
+    end
+]
+
+fun render_gauge(buf: Buffer, g: Gauge, area: Rect) [
+    let inner = area.clone()
+    if g.has_block [
+        render_block(buf, g.block, area)
+        inner = block_inner(g.block, area)
+    ]
+    buffer_set_style(buf, inner, g.style)
+    if rect_is_empty(inner) [
+        end
+    ]
+    let label = g.label.clone()
+    if label == "" [
+        label = ((g.permille / 10) as Str) + "%"
+    ]
+    let eighths = (inner.width * 8 * g.permille) / 1000
+    let full = eighths / 8
+    let part = eighths % 8
+    let partials = [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉"]
+    let y = inner.y
+    while y < inner.y + inner.height [
+        let x = 0
+        while x < inner.width [
+            if x < full [
+                buffer_set_cell(buf, inner.x + x, y, " ", style_of(0, g.gauge_style.fg, 0))
+            ] elif x == full and part > 0 [
+                buffer_set_cell(buf, inner.x + x, y, partials[part].clone(), style_of(g.gauge_style.fg, 0, 0))
+            ]
+            x = x + 1
+        ]
+        y = y + 1
+    ]
+    let ly = inner.y + inner.height / 2
+    let lx = inner.x + max_int(0, (inner.width - uni_width(label.clone())) / 2)
+    buffer_set_string(buf, lx, ly, label.clone(), style_of(0, 0, 1), inner.width)
+    end
+]
+
+!! -- Tabs -------------------------------------------------------------------
+
+struct Tabs [
+    titles: List<Line>,
+    selected: Int,
+    style: Style,
+    highlight_style: Style,
+    divider: Str,
+    block: Block,
+    has_block: Bool
+]
+
+fun tabs_new(titles: List<Str>) -> Tabs [
+    let ls: List<Line> = []
+    let i = 0
+    while i < titles.len() [
+        ls.push(line_raw(titles[i].clone()))
+        i = i + 1
+    ]
+    end Tabs(ls, 0, style_new(), style_of(0, 0, 64), "|", block_new(), false)
+]
+
+fun tabs_set_selected(t: Tabs, idx: Int) [
+    t.selected = idx
+    end
+]
+
+fun tabs_set_highlight_style(t: Tabs, s: Style) [
+    t.highlight_style = s.clone()
+    end
+]
+
+fun tabs_set_divider(t: Tabs, d: Str) [
+    t.divider = d.clone()
+    end
+]
+
+fun tabs_set_block(t: Tabs, b: Block) [
+    t.block = b.clone()
+    t.has_block = true
+    end
+]
+
+fun render_tabs(buf: Buffer, t: Tabs, area: Rect) [
+    let inner = area.clone()
+    if t.has_block [
+        render_block(buf, t.block, area)
+        inner = block_inner(t.block, area)
+    ]
+    buffer_set_style(buf, inner, t.style)
+    if rect_is_empty(inner) [
+        end
+    ]
+    let x = inner.x
+    let limit = inner.x + inner.width
+    let i = 0
+    while i < t.titles.len() and x < limit [
+        let st = style_new()
+        if i == t.selected [
+            st = t.highlight_style.clone()
+        ]
+        x = buffer_set_string(buf, x, inner.y, " ", st, limit - x)
+        let ln = t.titles[i].clone()
+        ln.style = style_patch(ln.style, st)
+        x = buffer_set_line(buf, x, inner.y, ln, limit - x)
+        x = buffer_set_string(buf, x, inner.y, " ", st, limit - x)
+        if i < t.titles.len() - 1 [
+            x = buffer_set_string(buf, x, inner.y, t.divider.clone(), style_new(), limit - x)
+        ]
+        i = i + 1
+    ]
+    end
+]
+
+!! -- Sparkline --------------------------------------------------------------
+
+struct Sparkline [
+    data: List<Int>,
+    max: Int,
+    style: Style,
+    block: Block,
+    has_block: Bool
+]
+
+fun sparkline_new(data: List<Int>) -> Sparkline [
+    end Sparkline(data.clone(), 0, style_new(), block_new(), false)
+]
+
+fun sparkline_set_max(s: Sparkline, m: Int) [
+    s.max = m
+    end
+]
+
+fun sparkline_set_style(s: Sparkline, st: Style) [
+    s.style = st.clone()
+    end
+]
+
+fun sparkline_set_block(s: Sparkline, b: Block) [
+    s.block = b.clone()
+    s.has_block = true
+    end
+]
+
+!!! Rysuje slupki ▁..█ (wielowierszowe gdy area.height > 1); dane od lewej.
+fun render_sparkline(buf: Buffer, s: Sparkline, area: Rect) [
+    let inner = area.clone()
+    if s.has_block [
+        render_block(buf, s.block, area)
+        inner = block_inner(s.block, area)
+    ]
+    if rect_is_empty(inner) [
+        end
+    ]
+    let mx = s.max
+    if mx <= 0 [
+        let i = 0
+        while i < s.data.len() [
+            mx = max_int(mx, s.data[i])
+            i = i + 1
+        ]
+    ]
+    if mx <= 0 [
+        end
+    ]
+    let bars = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+    let levels = inner.height * 8
+    let x = 0
+    while x < inner.width and x < s.data.len() [
+        let v = min_int(s.data[x], mx)
+        let h = (v * levels) / mx
+        let row = 0
+        while row < inner.height [
+            let base = row * 8
+            let cell = h - base
+            if cell > 8 [
+                cell = 8
+            ]
+            if cell > 0 [
+                buffer_set_cell(buf, inner.x + x, inner.y + inner.height - 1 - row, bars[cell].clone(), s.style)
+            ]
+            row = row + 1
+        ]
+        x = x + 1
+    ]
+    end
+]
+
+!! -- BarChart ---------------------------------------------------------------
+
+struct Bar [
+    label: Str,
+    value: Int,
+    style: Style
+]
+
+struct BarChart [
+    bars: List<Bar>,
+    bar_width: Int,
+    bar_gap: Int,
+    max: Int,
+    style: Style,
+    block: Block,
+    has_block: Bool
+]
+
+fun bar_new(label: Str, value: Int) -> Bar [
+    end Bar(label.clone(), value, style_new())
+]
+
+fun bar_styled(label: Str, value: Int, style: Style) -> Bar [
+    end Bar(label.clone(), value, style.clone())
+]
+
+fun barchart_new(bars: List<Bar>) -> BarChart [
+    end BarChart(bars.clone(), 3, 1, 0, style_of(COLOR_CYAN, 0, 0), block_new(), false)
+]
+
+fun barchart_set_bar_width(c: BarChart, w: Int) [
+    c.bar_width = w
+    end
+]
+
+fun barchart_set_bar_gap(c: BarChart, g: Int) [
+    c.bar_gap = g
+    end
+]
+
+fun barchart_set_max(c: BarChart, m: Int) [
+    c.max = m
+    end
+]
+
+fun barchart_set_block(c: BarChart, b: Block) [
+    c.block = b.clone()
+    c.has_block = true
+    end
+]
+
+fun render_barchart(buf: Buffer, c: BarChart, area: Rect) [
+    let inner = area.clone()
+    if c.has_block [
+        render_block(buf, c.block, area)
+        inner = block_inner(c.block, area)
+    ]
+    if inner.width <= 0 or inner.height < 2 [
+        end
+    ]
+    let mx = c.max
+    if mx <= 0 [
+        let i = 0
+        while i < c.bars.len() [
+            mx = max_int(mx, c.bars[i].value)
+            i = i + 1
+        ]
+    ]
+    if mx <= 0 [
+        end
+    ]
+    let chart_h = inner.height - 1
+    let levels = chart_h * 8
+    let blocks = [" ", "▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+    let x = inner.x
+    let k = 0
+    while k < c.bars.len() and x + c.bar_width <= inner.x + inner.width [
+        let bar = c.bars[k].clone()
+        let st = c.style.clone()
+        if bar.style.fg != 0 or bar.style.bg != 0 [
+            st = bar.style.clone()
+        ]
+        let h = (min_int(bar.value, mx) * levels) / mx
+        let row = 0
+        while row < chart_h [
+            let cell = h - row * 8
+            if cell > 8 [
+                cell = 8
+            ]
+            if cell > 0 [
+                let cx = 0
+                while cx < c.bar_width [
+                    buffer_set_cell(buf, x + cx, inner.y + chart_h - 1 - row, blocks[cell].clone(), st)
+                    cx = cx + 1
+                ]
+            ]
+            row = row + 1
+        ]
+        let vs = bar.value as Str
+        if uni_width(vs.clone()) <= c.bar_width [
+            buffer_set_string(buf, x, inner.y + chart_h - 1, vs.clone(), style_of(0, 0, 1), c.bar_width)
+        ]
+        buffer_set_string(buf, x, inner.y + inner.height - 1, uni_cut(bar.label.clone(), 0, c.bar_width), style_new(), c.bar_width)
+        x = x + c.bar_width + c.bar_gap
+        k = k + 1
+    ]
+    end
+]
+
+!! -- Scrollbar --------------------------------------------------------------
+
+struct ScrollbarState [
+    content_length: Int,
+    position: Int,
+    viewport: Int
+]
+
+fun scrollbar_state_new(content_length: Int) -> ScrollbarState [
+    end ScrollbarState(content_length, 0, 0)
+]
+
+fun scrollbar_state_set_position(s: ScrollbarState, pos: Int) [
+    s.position = pos
+    end
+]
+
+fun scrollbar_state_set_viewport(s: ScrollbarState, v: Int) [
+    s.viewport = v
+    end
+]
+
+!!! Pionowy (`vertical = true`) lub poziomy suwak w `area` (zwykle prawa
+!!! krawedz bloku). Uchwyt ma dlugosc proporcjonalna do viewport/content.
+fun render_scrollbar(buf: Buffer, area: Rect, vertical: Bool, s: ScrollbarState, style: Style) [
+    let len = area.height
+    if not vertical [
+        len = area.width
+    ]
+    if len <= 0 or s.content_length <= 0 [
+        end
+    ]
+    let track = "║"
+    let thumb = "█"
+    if not vertical [
+        track = "═"
+    ]
+    let vp = s.viewport
+    if vp <= 0 [
+        vp = len
+    ]
+    let thumb_len = max_int(1, (len * min_int(vp, s.content_length)) / s.content_length)
+    let span = s.content_length - 1
+    let pos = min_int(max_int(0, s.position), span)
+    let start = 0
+    if span > 0 [
+        start = (pos * (len - thumb_len)) / span
+    ]
+    let i = 0
+    while i < len [
+        let sym = track.clone()
+        if i >= start and i < start + thumb_len [
+            sym = thumb.clone()
+        ]
+        if vertical [
+            buffer_set_cell(buf, area.x, area.y + i, sym, style)
+        ] else [
+            buffer_set_cell(buf, area.x + i, area.y, sym, style)
+        ]
+        i = i + 1
+    ]
+    end
+]
