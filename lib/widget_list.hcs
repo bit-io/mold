@@ -1,0 +1,439 @@
+include <style>
+include <geometry>
+include <backend>
+include <text>
+include <buffer>
+include <widget_block>
+
+struct ListItem [
+    text: Text,
+    style: Style
+]
+
+struct ListState [
+    selected: Int,
+    offset: Int
+]
+
+struct ListWidget [
+    items: List<ListItem>,
+    block: Block,
+    has_block: Bool,
+    style: Style,
+    highlight_style: Style,
+    highlight_symbol: Str
+]
+
+fun list_item_str(s: Str) -> ListItem [
+    end ListItem(text_raw(s), style_new())
+]
+
+fun list_item_text(t: Text) -> ListItem [
+    end ListItem(t.clone(), style_new())
+]
+
+fun list_item_styled(s: Str, style: Style) -> ListItem [
+    end ListItem(text_raw(s), style.clone())
+]
+
+fun list_widget_new(items: List<ListItem>) -> ListWidget [
+    end ListWidget(items.clone(), block_new(), false, style_new(), style_new(), "")
+]
+
+!!! Lista z napisow (najkrotsza forma).
+fun list_widget_from_strs(items: List<Str>) -> ListWidget [
+    let out: List<ListItem> = []
+    let i = 0
+    while i < items.len() [
+        out.push(list_item_str(items[i].clone()))
+        i = i + 1
+    ]
+    end list_widget_new(out)
+]
+
+fun list_widget_set_block(l: ListWidget, b: Block) [
+    l.block = b.clone()
+    l.has_block = true
+    end
+]
+
+fun list_widget_set_style(l: ListWidget, s: Style) [
+    l.style = s.clone()
+    end
+]
+
+fun list_widget_set_highlight_style(l: ListWidget, s: Style) [
+    l.highlight_style = s.clone()
+    end
+]
+
+fun list_widget_set_highlight_symbol(l: ListWidget, sym: Str) [
+    l.highlight_symbol = sym.clone()
+    end
+]
+
+!! -- ListState --------------------------------------------------------------
+
+fun list_state_new() -> ListState [
+    end ListState(-1, 0)
+]
+
+fun list_state_selected(st: ListState) -> Int [
+    end st.selected
+]
+
+fun list_state_select(st: ListState, idx: Int) [
+    st.selected = idx
+    end
+]
+
+!!! Nastepny element (zawija na poczatek); `len` = liczba elementow.
+fun list_state_next(st: ListState, len: Int) [
+    if len <= 0 [
+        st.selected = -1
+        end
+    ]
+    if st.selected < 0 or st.selected >= len - 1 [
+        st.selected = 0
+        end
+    ]
+    st.selected = st.selected + 1
+    end
+]
+
+fun list_state_previous(st: ListState, len: Int) [
+    if len <= 0 [
+        st.selected = -1
+        end
+    ]
+    if st.selected <= 0 [
+        st.selected = len - 1
+        end
+    ]
+    st.selected = st.selected - 1
+    end
+]
+
+fun list_state_first(st: ListState) [
+    st.selected = 0
+    end
+]
+
+fun list_state_last(st: ListState, len: Int) [
+    st.selected = len - 1
+    end
+]
+
+fun list_item_height(it: ListItem) -> Int [
+    end max_int(1, it.text.lines.len())
+]
+
+!!! Przewija `st.offset` tak, by zaznaczony element miescil sie w `height` wierszach.
+fun list_fix_offset(heights: List<Int>, st: ListState, height: Int) [
+    let n = heights.len()
+    if n == 0 [
+        st.offset = 0
+        end
+    ]
+    if st.offset < 0 [
+        st.offset = 0
+    ]
+    if st.offset > n - 1 [
+        st.offset = n - 1
+    ]
+    if st.selected >= 0 and st.selected < n [
+        if st.selected < st.offset [
+            st.offset = st.selected
+        ]
+        let used = 0
+        let k = st.offset
+        while k <= st.selected [
+            used = used + heights[k]
+            k = k + 1
+        ]
+        while st.offset < st.selected and used > height [
+            used = used - heights[st.offset]
+            st.offset = st.offset + 1
+        ]
+    ]
+    end
+]
+
+fun render_list(buf: Buffer, l: ListWidget, area: Rect, st: ListState) [
+    let inner = area.clone()
+    if l.has_block [
+        render_block(buf, l.block, area)
+        inner = block_inner(l.block, area)
+    ]
+    buffer_set_style(buf, inner, l.style)
+    if rect_is_empty(inner) [
+        end
+    ]
+    let n = l.items.len()
+    let heights: List<Int> = []
+    let q = 0
+    while q < n [
+        heights.push(list_item_height(l.items[q].clone()))
+        q = q + 1
+    ]
+    list_fix_offset(heights, st, inner.height)
+    let has_sel = st.selected >= 0 and st.selected < n
+    let sym_w = 0
+    if has_sel [
+        sym_w = uni_width(l.highlight_symbol.clone())
+    ]
+    let y = inner.y
+    let bottom = inner.y + inner.height
+    let i = st.offset
+    while i < n and y < bottom [
+        let it = l.items[i].clone()
+        let is_sel = has_sel and i == st.selected
+        let r = 0
+        while r < heights[i] and y < bottom [
+            let row_area = Rect(inner.x, y, inner.width, 1)
+            buffer_set_style(buf, row_area, it.style)
+            if is_sel [
+                buffer_set_style(buf, row_area, l.highlight_style)
+            ]
+            if sym_w > 0 [
+                if is_sel and r == 0 [
+                    buffer_set_string(buf, inner.x, y, l.highlight_symbol.clone(), l.highlight_style, sym_w)
+                ]
+            ]
+            if r < it.text.lines.len() [
+                buffer_set_line(buf, inner.x + sym_w, y, it.text.lines[r].clone(), inner.width - sym_w)
+            ]
+            y = y + 1
+            r = r + 1
+        ]
+        i = i + 1
+    ]
+    end
+]
+
+!! -- Table ------------------------------------------------------------------
+
+struct Row [
+    cells: List<Text>,
+    style: Style,
+    bottom_margin: Int
+]
+
+struct TableState [
+    selected: Int,
+    offset: Int
+]
+
+struct Table [
+    rows: List<Row>,
+    header: Row,
+    has_header: Bool,
+    widths: List<Constraint>,
+    spacing: Int,
+    block: Block,
+    has_block: Bool,
+    style: Style,
+    highlight_style: Style,
+    highlight_symbol: Str
+]
+
+!!! Wiersz z napisow; `\n` w komorce daje komorke wielowierszowa.
+fun row_from_strs(cells: List<Str>) -> Row [
+    let out: List<Text> = []
+    let i = 0
+    while i < cells.len() [
+        out.push(text_raw(cells[i].clone()))
+        i = i + 1
+    ]
+    end Row(out, style_new(), 0)
+]
+
+fun row_from_lines(cells: List<Line>) -> Row [
+    let out: List<Text> = []
+    let i = 0
+    while i < cells.len() [
+        out.push(text_from_lines([cells[i].clone()]))
+        i = i + 1
+    ]
+    end Row(out, style_new(), 0)
+]
+
+!!! Wiersz ze stylowanych tekstow (dowolna liczba linii na komorke).
+fun row_from_texts(cells: List<Text>) -> Row [
+    end Row(cells.clone(), style_new(), 0)
+]
+
+!!! Wysokosc wiersza = najwyzsza komorka (min. 1), bez bottom_margin.
+fun row_height(r: Row) -> Int [
+    let h = 1
+    let i = 0
+    while i < r.cells.len() [
+        h = max_int(h, r.cells[i].lines.len())
+        i = i + 1
+    ]
+    end h
+]
+
+fun row_set_style(r: Row, s: Style) [
+    r.style = s.clone()
+    end
+]
+
+fun row_set_bottom_margin(r: Row, m: Int) [
+    r.bottom_margin = m
+    end
+]
+
+fun table_new(rows: List<Row>, widths: List<Constraint>) -> Table [
+    end Table(rows.clone(), row_from_strs([]), false, widths.clone(), 1, block_new(), false, style_new(), style_new(), "")
+]
+
+fun table_set_header(t: Table, h: Row) [
+    t.header = h.clone()
+    t.has_header = true
+    end
+]
+
+fun table_set_block(t: Table, b: Block) [
+    t.block = b.clone()
+    t.has_block = true
+    end
+]
+
+fun table_set_style(t: Table, s: Style) [
+    t.style = s.clone()
+    end
+]
+
+fun table_set_highlight_style(t: Table, s: Style) [
+    t.highlight_style = s.clone()
+    end
+]
+
+fun table_set_highlight_symbol(t: Table, sym: Str) [
+    t.highlight_symbol = sym.clone()
+    end
+]
+
+fun table_set_column_spacing(t: Table, n: Int) [
+    t.spacing = n
+    end
+]
+
+fun table_state_new() -> TableState [
+    end TableState(-1, 0)
+]
+
+fun table_state_select(st: TableState, idx: Int) [
+    st.selected = idx
+    end
+]
+
+fun table_state_next(st: TableState, len: Int) [
+    if len <= 0 [
+        st.selected = -1
+        end
+    ]
+    if st.selected < 0 or st.selected >= len - 1 [
+        st.selected = 0
+        end
+    ]
+    st.selected = st.selected + 1
+    end
+]
+
+fun table_state_previous(st: TableState, len: Int) [
+    if len <= 0 [
+        st.selected = -1
+        end
+    ]
+    if st.selected <= 0 [
+        st.selected = len - 1
+        end
+    ]
+    st.selected = st.selected - 1
+    end
+]
+
+fun table_draw_row(buf: Buffer, r: Row, cols: List<Rect>, x0: Int, y: Int, bottom: Int) [
+    let k = 0
+    while k < cols.len() and k < r.cells.len() [
+        let c = cols[k].clone()
+        let li = 0
+        while li < r.cells[k].lines.len() and y + li < bottom [
+            let ln = r.cells[k].lines[li].clone()
+            ln.style = style_patch(r.cells[k].style, ln.style)
+            let off = align_off(c.width, line_width(ln.clone()), ln.align)
+            buffer_set_line(buf, x0 + c.x + off, y + li, ln, c.width - off)
+            li = li + 1
+        ]
+        k = k + 1
+    ]
+    end
+]
+
+fun align_off(width: Int, content_w: Int, align: Int) -> Int [
+    if align == 1 [
+        end max_int(0, (width - content_w) / 2)
+    ]
+    if align == 2 [
+        end max_int(0, width - content_w)
+    ]
+    end 0
+]
+
+fun render_table(buf: Buffer, t: Table, area: Rect, st: TableState) [
+    let inner = area.clone()
+    if t.has_block [
+        render_block(buf, t.block, area)
+        inner = block_inner(t.block, area)
+    ]
+    buffer_set_style(buf, inner, t.style)
+    if rect_is_empty(inner) [
+        end
+    ]
+    let n = t.rows.len()
+    let sym_w = 0
+    if st.selected >= 0 and st.selected < n [
+        sym_w = uni_width(t.highlight_symbol.clone())
+    ]
+    let cols = layout_split(Rect(0, 0, max_int(0, inner.width - sym_w), 1), true, t.widths, 0, t.spacing)
+    let bottom = inner.y + inner.height
+    let y = inner.y
+    if t.has_header [
+        let hh = row_height(t.header)
+        buffer_set_style(buf, Rect(inner.x, y, inner.width, min_int(hh, bottom - y)), t.header.style)
+        table_draw_row(buf, t.header, cols, inner.x + sym_w, y, bottom)
+        y = y + hh + t.header.bottom_margin
+    ]
+    let avail = bottom - y
+    if avail <= 0 [
+        end
+    ]
+    let heights: List<Int> = []
+    let q = 0
+    while q < n [
+        heights.push(row_height(t.rows[q].clone()) + t.rows[q].bottom_margin)
+        q = q + 1
+    ]
+    let ls = ListState(st.selected, st.offset)
+    list_fix_offset(heights, ls, avail)
+    st.offset = ls.offset
+    let i = st.offset
+    while i < n and y < bottom [
+        let row = t.rows[i].clone()
+        let rh = min_int(row_height(row.clone()), bottom - y)
+        let rect = Rect(inner.x, y, inner.width, rh)
+        buffer_set_style(buf, rect, row.style)
+        if i == st.selected [
+            buffer_set_style(buf, rect, t.highlight_style)
+            if sym_w > 0 [
+                buffer_set_string(buf, inner.x, y, t.highlight_symbol.clone(), t.highlight_style, sym_w)
+            ]
+        ]
+        table_draw_row(buf, row, cols, inner.x + sym_w, y, bottom)
+        y = y + heights[i]
+        i = i + 1
+    ]
+    end
+]
