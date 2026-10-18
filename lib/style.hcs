@@ -1,0 +1,216 @@
+const COLOR_NONE: Int = 0
+const COLOR_RESET: Int = 1
+const COLOR_BLACK: Int = 2
+const COLOR_RED: Int = 3
+const COLOR_GREEN: Int = 4
+const COLOR_YELLOW: Int = 5
+const COLOR_BLUE: Int = 6
+const COLOR_MAGENTA: Int = 7
+const COLOR_CYAN: Int = 8
+const COLOR_GRAY: Int = 9
+const COLOR_DARK_GRAY: Int = 10
+const COLOR_LIGHT_RED: Int = 11
+const COLOR_LIGHT_GREEN: Int = 12
+const COLOR_LIGHT_YELLOW: Int = 13
+const COLOR_LIGHT_BLUE: Int = 14
+const COLOR_LIGHT_MAGENTA: Int = 15
+const COLOR_LIGHT_CYAN: Int = 16
+const COLOR_WHITE: Int = 17
+
+const MOD_BOLD: Int = 1
+const MOD_DIM: Int = 2
+const MOD_ITALIC: Int = 4
+const MOD_UNDERLINED: Int = 8
+const MOD_SLOW_BLINK: Int = 16
+const MOD_RAPID_BLINK: Int = 32
+const MOD_REVERSED: Int = 64
+const MOD_HIDDEN: Int = 128
+const MOD_CROSSED_OUT: Int = 256
+
+!!! Kolor indexed 0..255 (paleta xterm).
+fun color_indexed(n: Int) -> Int [
+    if n < 0 [
+        end 100
+    ]
+    if n > 255 [
+        end 355
+    ]
+    end 100 + n
+]
+
+!!! Kolor 24-bit.
+fun color_rgb(r: Int, g: Int, b: Int) -> Int [
+    end 20000000 + (r % 256) * 65536 + (g % 256) * 256 + (b % 256)
+]
+
+!!! Czy zestaw flag `m` zawiera flage `f` (potega dwojki).
+fun mods_has(m: Int, f: Int) -> Bool [
+    end (m / f) % 2 == 1
+]
+
+!!! Dodaje flage `f` do `m`.
+fun mods_add(m: Int, f: Int) -> Int [
+    if mods_has(m, f) [
+        end m
+    ]
+    end m + f
+]
+
+!!! Usuwa flage `f` z `m`.
+fun mods_remove(m: Int, f: Int) -> Int [
+    if mods_has(m, f) [
+        end m - f
+    ]
+    end m
+]
+
+!!! Nakłada `add` i `sub` na `m` (flagi z `sub` zdejmowane po dodaniu).
+fun mods_apply(m: Int, add: Int, sub: Int) -> Int [
+    let out = m
+    let f = 1
+    while f <= 256 [
+        if mods_has(add, f) [
+            out = mods_add(out, f)
+        ]
+        if mods_has(sub, f) [
+            out = mods_remove(out, f)
+        ]
+        f = f * 2
+    ]
+    end out
+]
+
+!!! Styl: kolor tekstu, tla, dodane i zdjete modyfikatory.
+struct Style [
+    fg: Int,
+    bg: Int,
+    add: Int,
+    sub: Int
+]
+
+fun style_new() -> Style [
+    end Style(0, 0, 0, 0)
+]
+
+!!! Styl z kolorow i modyfikatorow (najkrotsza forma).
+fun style_of(fg: Int, bg: Int, mods: Int) -> Style [
+    end Style(fg, bg, mods, 0)
+]
+
+fun style_fg(s: Style, c: Int) -> Style [
+    end Style(c, s.bg, s.add, s.sub)
+]
+
+fun style_bg(s: Style, c: Int) -> Style [
+    end Style(s.fg, c, s.add, s.sub)
+]
+
+fun style_add_mod(s: Style, f: Int) -> Style [
+    end Style(s.fg, s.bg, mods_add(s.add, f), mods_remove(s.sub, f))
+]
+
+fun style_remove_mod(s: Style, f: Int) -> Style [
+    end Style(s.fg, s.bg, mods_remove(s.add, f), mods_add(s.sub, f))
+]
+
+fun style_bold(s: Style) -> Style [
+    end style_add_mod(s, 1)
+]
+
+fun style_italic(s: Style) -> Style [
+    end style_add_mod(s, 4)
+]
+
+fun style_underlined(s: Style) -> Style [
+    end style_add_mod(s, 8)
+]
+
+fun style_reversed(s: Style) -> Style [
+    end style_add_mod(s, 64)
+]
+
+fun style_dim(s: Style) -> Style [
+    end style_add_mod(s, 2)
+]
+
+!!! Nakłada `b` na `a` (niepuste pola `b` wygrywaja) - jak `Style::patch`.
+fun style_patch(a: Style, b: Style) -> Style [
+    let fg = a.fg
+    let bg = a.bg
+    if b.fg != 0 [
+        fg = b.fg
+    ]
+    if b.bg != 0 [
+        bg = b.bg
+    ]
+    let add = mods_apply(a.add, b.add, b.sub)
+    let sub = mods_apply(a.sub, b.sub, b.add)
+    end Style(fg, bg, add, sub)
+]
+
+!!! Kod SGR koloru: `bg = true` dla tla. Pusty Str dla COLOR_NONE.
+fun color_sgr(c: Int, bg: Bool) -> Str [
+    let base = 30
+    let dflt = "39"
+    if bg [
+        base = 40
+        dflt = "49"
+    ]
+    if c <= 1 [
+        end dflt
+    ]
+    if c <= 17 [
+        let n = c - 2
+        if n < 8 [
+            end ((base + n) as Str)
+        ]
+        end ((base + 60 + n - 8) as Str)
+    ]
+    if c >= 20000000 [
+        let v = c - 20000000
+        let r = v / 65536
+        let g = (v / 256) % 256
+        let b = v % 256
+        end ((base + 8) as Str) + ";2;" + (r as Str) + ";" + (g as Str) + ";" + (b as Str)
+    ]
+    end ((base + 8) as Str) + ";5;" + ((c - 100) as Str)
+]
+
+!!! Pelna sekwencja SGR (z resetem) dla koloru tekstu, tla i modyfikatorow.
+fun sgr_sequence(fg: Int, bg: Int, mods: Int) -> Str [
+    let out = "\e[0"
+    if mods_has(mods, 1) [
+        out = out + ";1"
+    ]
+    if mods_has(mods, 2) [
+        out = out + ";2"
+    ]
+    if mods_has(mods, 4) [
+        out = out + ";3"
+    ]
+    if mods_has(mods, 8) [
+        out = out + ";4"
+    ]
+    if mods_has(mods, 16) [
+        out = out + ";5"
+    ]
+    if mods_has(mods, 32) [
+        out = out + ";6"
+    ]
+    if mods_has(mods, 64) [
+        out = out + ";7"
+    ]
+    if mods_has(mods, 128) [
+        out = out + ";8"
+    ]
+    if mods_has(mods, 256) [
+        out = out + ";9"
+    ]
+    if fg > 1 [
+        out = out + ";" + color_sgr(fg, false)
+    ]
+    if bg > 1 [
+        out = out + ";" + color_sgr(bg, true)
+    ]
+    end out + "m"
+]
