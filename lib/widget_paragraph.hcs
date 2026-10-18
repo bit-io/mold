@@ -1,0 +1,176 @@
+include <style>
+include <geometry>
+include <backend>
+include <text>
+include <buffer>
+include <widget_block>
+
+struct Paragraph [
+    text: Text,
+    style: Style,
+    wrap: Bool,
+    trim: Bool,
+    scroll_x: Int,
+    scroll_y: Int,
+    align: Int,
+    block: Block,
+    has_block: Bool
+]
+
+fun paragraph_new(text: Text) -> Paragraph [
+    end Paragraph(text.clone(), style_new(), false, true, 0, 0, 0, block_new(), false)
+]
+
+fun paragraph_from_str(s: Str) -> Paragraph [
+    end paragraph_new(text_raw(s))
+]
+
+fun paragraph_set_block(p: Paragraph, b: Block) [
+    p.block = b.clone()
+    p.has_block = true
+    end
+]
+
+fun paragraph_set_style(p: Paragraph, s: Style) [
+    p.style = s.clone()
+    end
+]
+
+!!! Wlacza zawijanie wierszy (`trim` = obcinaj spacje na poczatku zawinietych).
+fun paragraph_set_wrap(p: Paragraph, trim: Bool) [
+    p.wrap = true
+    p.trim = trim
+    end
+]
+
+fun paragraph_set_scroll(p: Paragraph, y: Int, x: Int) [
+    p.scroll_y = y
+    p.scroll_x = x
+    end
+]
+
+fun paragraph_set_align(p: Paragraph, align: Int) [
+    p.align = align
+    end
+]
+
+!!! Rozbija linie na jednokomorkowe spany (zlaczony styl linii i spana).
+fun line_split_cells(l: Line) -> Line [
+    let spans: List<Span> = []
+    let i = 0
+    while i < l.spans.len() [
+        let st = style_patch(l.style, l.spans[i].style)
+        let gs = uni_graphemes(l.spans[i].content.clone())
+        let k = 0
+        while k < gs.len() [
+            spans.push(Span(gs[k].clone(), st.clone()))
+            k = k + 1
+        ]
+        i = i + 1
+    ]
+    end Line(spans, style_new(), l.align)
+]
+
+!!! Wiersze wizualne jednej linii tekstu (z zawijaniem lub bez).
+fun line_visual_rows(l: Line, width: Int, wrap: Bool, trim: Bool, scroll_x: Int) -> List<Line> [
+    let cells = line_split_cells(l)
+    let rows: List<Line> = []
+    if not wrap [
+        let spans: List<Span> = []
+        let col = 0
+        let i = 0
+        while i < cells.spans.len() [
+            let w = uni_width(cells.spans[i].content.clone())
+            if col >= scroll_x [
+                spans.push(cells.spans[i].clone())
+            ]
+            col = col + w
+            i = i + 1
+        ]
+        rows.push(Line(spans, style_new(), l.align))
+        end rows
+    ]
+    let plain = line_plain(l)
+    let parts = uni_wrap(plain, width, trim)
+    let ptr = 0
+    let r = 0
+    while r < parts.len() [
+        let gs = uni_graphemes(parts[r].clone())
+        let spans2: List<Span> = []
+        let k = 0
+        while k < gs.len() [
+            while ptr < cells.spans.len() and cells.spans[ptr].content != gs[k] [
+                ptr = ptr + 1
+            ]
+            if ptr < cells.spans.len() [
+                spans2.push(cells.spans[ptr].clone())
+                ptr = ptr + 1
+            ] else [
+                spans2.push(span_raw(gs[k].clone()))
+            ]
+            k = k + 1
+        ]
+        rows.push(Line(spans2, style_new(), l.align))
+        r = r + 1
+    ]
+    end rows
+]
+
+fun align_offset(width: Int, content_w: Int, align: Int) -> Int [
+    if align == 1 [
+        end max_int(0, (width - content_w) / 2)
+    ]
+    if align == 2 [
+        end max_int(0, width - content_w)
+    ]
+    end 0
+]
+
+fun render_paragraph(buf: Buffer, p: Paragraph, area: Rect) [
+    let inner = area.clone()
+    if p.has_block [
+        render_block(buf, p.block, area)
+        inner = block_inner(p.block, area)
+    ]
+    if rect_is_empty(inner) [
+        end
+    ]
+    buffer_set_style(buf, inner, style_patch(p.style, p.text.style))
+    let row = 0
+    let li = 0
+    while li < p.text.lines.len() and row - p.scroll_y < inner.height [
+        let line = p.text.lines[li].clone()
+        let al = p.align
+        if p.text.align != 0 [
+            al = p.text.align
+        ]
+        if line.align != 0 [
+            al = line.align
+        ]
+        let rows = line_visual_rows(line, inner.width, p.wrap, p.trim, p.scroll_x)
+        let r = 0
+        while r < rows.len() [
+            let vr = row - p.scroll_y
+            if vr >= 0 and vr < inner.height [
+                let off = align_offset(inner.width, line_width(rows[r].clone()), al)
+                buffer_set_line(buf, inner.x + off, inner.y + vr, rows[r], inner.width - off)
+            ]
+            row = row + 1
+            r = r + 1
+        ]
+        li = li + 1
+    ]
+    end
+]
+
+!!! Liczba wierszy wizualnych tekstu przy danej szerokosci (do przewijania).
+fun paragraph_line_count(p: Paragraph, width: Int) -> Int [
+    let n = 0
+    let li = 0
+    while li < p.text.lines.len() [
+        let rows = line_visual_rows(p.text.lines[li].clone(), width, p.wrap, p.trim, 0)
+        n = n + rows.len()
+        li = li + 1
+    ]
+    end n
+]
