@@ -1,0 +1,181 @@
+include <style>
+include <geometry>
+include <backend>
+include <text>
+
+!!! Jedna komorka terminala. Pusty `symbol` oznacza "druga polowa" znaku szerokiego.
+struct Cell [
+    symbol: Str,
+    fg: Int,
+    bg: Int,
+    mods: Int
+]
+
+fun cell_blank() -> Cell [
+    end Cell(" ", 0, 0, 0)
+]
+
+struct Buffer [
+    area: Rect,
+    cells: List<Cell>
+]
+
+fun buffer_new(area: Rect) -> Buffer [
+    let cells: List<Cell> = []
+    let n = max_int(0, area.width) * max_int(0, area.height)
+    let i = 0
+    while i < n [
+        cells.push(cell_blank())
+        i = i + 1
+    ]
+    end Buffer(area.clone(), cells)
+]
+
+!!! Czysci wszystkie komorki.
+fun buffer_reset(b: Buffer) [
+    let i = 0
+    let n = b.cells.len()
+    while i < n [
+        b.cells[i] = cell_blank()
+        i = i + 1
+    ]
+    end
+]
+
+fun buffer_index(b: Buffer, x: Int, y: Int) -> Int [
+    end (y - b.area.y) * b.area.width + (x - b.area.x)
+]
+
+fun buffer_in_bounds(b: Buffer, x: Int, y: Int) -> Bool [
+    end rect_contains(b.area, x, y)
+]
+
+!!! Symbol komorki (x, y); pusty Str poza buforem.
+fun buffer_symbol(b: Buffer, x: Int, y: Int) -> Str [
+    if not buffer_in_bounds(b, x, y) [
+        end ""
+    ]
+    end b.cells[buffer_index(b, x, y)].symbol.clone()
+]
+
+!!! Zapisuje jedna komorke (nakladajac `style` na istniejacy styl komorki).
+fun buffer_set_cell(b: Buffer, x: Int, y: Int, symbol: Str, style: Style) [
+    if not buffer_in_bounds(b, x, y) [
+        end
+    ]
+    let i = buffer_index(b, x, y)
+    let fg = b.cells[i].fg
+    let bg = b.cells[i].bg
+    let md = b.cells[i].mods
+    if style.fg != 0 [
+        fg = style.fg
+    ]
+    if style.bg != 0 [
+        bg = style.bg
+    ]
+    md = mods_apply(md, style.add, style.sub)
+    b.cells[i] = Cell(symbol.clone(), fg, bg, md)
+    end
+]
+
+!!! Nakłada styl na istniejace komorki w `area` (bez zmiany symboli).
+fun buffer_set_style(b: Buffer, area: Rect, style: Style) [
+    let r = rect_intersection(area, b.area)
+    let y = r.y
+    while y < r.y + r.height [
+        let x = r.x
+        while x < r.x + r.width [
+            let i = buffer_index(b, x, y)
+            let fg = b.cells[i].fg
+            let bg = b.cells[i].bg
+            if style.fg != 0 [
+                fg = style.fg
+            ]
+            if style.bg != 0 [
+                bg = style.bg
+            ]
+            let md = mods_apply(b.cells[i].mods, style.add, style.sub)
+            b.cells[i] = Cell(b.cells[i].symbol.clone(), fg, bg, md)
+            x = x + 1
+        ]
+        y = y + 1
+    ]
+    end
+]
+
+!!! Czysci `area` (spacje, styl domyslny).
+fun buffer_clear_area(b: Buffer, area: Rect) [
+    let r = rect_intersection(area, b.area)
+    let y = r.y
+    while y < r.y + r.height [
+        let x = r.x
+        while x < r.x + r.width [
+            let ci = buffer_index(b, x, y)
+            b.cells[ci] = cell_blank()
+            x = x + 1
+        ]
+        y = y + 1
+    ]
+    end
+]
+
+!!! Pisze `s` od (x, y), co najwyzej `max_width` komorek; zwraca kolumne za
+!!! ostatnim znakiem. Obsluguje znaki szerokie (CJK/emoji).
+fun buffer_set_string(b: Buffer, x: Int, y: Int, s: Str, style: Style, max_width: Int) -> Int [
+    let gs = uni_graphemes(s)
+    let cx = x
+    let limit = x + max_width
+    let k = 0
+    while k < gs.len() [
+        let g = gs[k].clone()
+        let w = uni_width(g.clone())
+        if cx + w > limit [
+            break
+        ]
+        if w > 0 [
+            if cx >= b.area.x and cx + w <= b.area.x + b.area.width [
+                buffer_set_cell(b, cx, y, g.clone(), style)
+                if w == 2 [
+                    buffer_set_cell(b, cx + 1, y, "", style)
+                ]
+            ]
+        ]
+        cx = cx + w
+        k = k + 1
+    ]
+    end cx
+]
+
+!!! Rysuje linie (spany z ich stylami, na bazie stylu linii) od (x, y).
+fun buffer_set_line(b: Buffer, x: Int, y: Int, l: Line, max_width: Int) -> Int [
+    let cx = x
+    let i = 0
+    while i < l.spans.len() [
+        let st = style_patch(l.style, l.spans[i].style)
+        let left = max_width - (cx - x)
+        if left <= 0 [
+            break
+        ]
+        cx = buffer_set_string(b, cx, y, l.spans[i].content.clone(), st, left)
+        i = i + 1
+    ]
+    end cx
+]
+
+!!! Plain tekst z bufora (wiersze rozdzielone \n) - do testow.
+fun buffer_to_string(b: Buffer) -> Str [
+    let out = ""
+    let y = 0
+    while y < b.area.height [
+        let x = 0
+        while x < b.area.width [
+            out = out + b.cells[y * b.area.width + x].symbol.clone()
+            x = x + 1
+        ]
+        if y < b.area.height - 1 [
+            out = out + "\n"
+        ]
+        y = y + 1
+    ]
+    end out
+]
